@@ -1,6 +1,7 @@
 import base64
 import binascii
 import json
+import os
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -175,6 +176,14 @@ async def create_realtime_session(
     enhanced_instructions = None
     latest_frame_base64: str | None = None
     if recent_context:
+        if recent_context:
+            print(f"Recent context image base64: {recent_context.image_base64}")
+            print(f"Recent context description: {recent_context.description}")
+            print(f"Recent context key elements: {recent_context.key_elements}")
+            print(f"Recent context user intent: {recent_context.user_intent}")
+            print(f"Recent context actionable items: {recent_context.actionable_items}")
+        else:
+            print("No recent context available.")
         latest_frame_base64 = recent_context.image_base64
         enhanced_instructions = f"""You are an AI assistant that can see and understand the user's current screen context.
 
@@ -227,6 +236,27 @@ async def accept_vision_frame(
         raise HTTPException(status_code=400, detail="Invalid base64-encoded image") from exc
 
     received_at = datetime.now(timezone.utc)
+
+    # Save the image to the backend folder for debugging/visualization
+    try:
+        # Create images directory if it doesn't exist
+        images_dir = os.path.join(os.path.dirname(__file__), "..", "..", "captured_images")
+        os.makedirs(images_dir, exist_ok=True)
+        
+        # Generate filename with timestamp and source
+        timestamp_str = received_at.strftime("%Y%m%d_%H%M%S_%f")[:-3]  # Include milliseconds
+        filename = f"frame_{timestamp_str}_{payload.source}.jpg"
+        filepath = os.path.join(images_dir, filename)
+        
+        # Save the decoded image
+        with open(filepath, "wb") as f:
+            f.write(decoded)
+            
+        print(f"Saved captured image to: {filepath}")
+        
+    except Exception as exc:
+        # Don't fail the request if image saving fails, just log it
+        print(f"Failed to save image: {exc}")
 
     # Store the raw frame for potential use in realtime conversations
     context = VisionContext(

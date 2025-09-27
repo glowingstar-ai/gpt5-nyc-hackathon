@@ -59,10 +59,12 @@ const extractResponseId = (payload: Record<string, unknown>): string => {
 
 type RealtimeConversationPanelProps = {
   onShareVisionFrame?: () => Promise<void>;
+  visionFrameIntervalMs?: number; // Interval between automatic vision frame captures in milliseconds
 };
 
 export function RealtimeConversationPanel({
   onShareVisionFrame,
+  visionFrameIntervalMs = 15000, // Default to 15 seconds
 }: RealtimeConversationPanelProps): JSX.Element {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
@@ -208,8 +210,12 @@ export function RealtimeConversationPanel({
 
     try {
       if (onShareVisionFrame) {
+        console.log(
+          `[Vision Frame] Initial capture triggered on connection start`
+        );
         try {
           await onShareVisionFrame();
+          console.log(`[Vision Frame] Initial capture completed successfully`);
         } catch (err) {
           console.warn("Unable to capture context frame", err);
         }
@@ -314,7 +320,13 @@ export function RealtimeConversationPanel({
         resetConnection();
       }
     }
-  }, [handleServerMessage, isActive, isConnecting, onShareVisionFrame, resetConnection]);
+  }, [
+    handleServerMessage,
+    isActive,
+    isConnecting,
+    onShareVisionFrame,
+    resetConnection,
+  ]);
 
   const stopConversation = useCallback(() => {
     if (!isConnecting && !isActive) {
@@ -354,6 +366,9 @@ export function RealtimeConversationPanel({
     };
   }, [resetConnection]);
 
+  // DISABLED: Automatic periodic vision frame captures
+  // Uncomment the code below if you want to re-enable automatic captures
+  /*
   useEffect(() => {
     if (!isActive || !onShareVisionFrame) {
       return undefined;
@@ -367,14 +382,17 @@ export function RealtimeConversationPanel({
         return;
       }
 
+      console.log(`[Vision Frame] Periodic capture triggered - interval: ${visionFrameIntervalMs}ms`);
       try {
         await onShareVisionFrame();
+        console.log(`[Vision Frame] Periodic capture completed successfully`);
       } catch (err) {
         console.warn("Unable to share periodic context frame", err);
       }
 
       if (!isCancelled) {
-        timeoutId = window.setTimeout(shareLoop, 2000);
+        timeoutId = window.setTimeout(shareLoop, visionFrameIntervalMs);
+        console.log(`[Vision Frame] Next capture scheduled in ${visionFrameIntervalMs}ms`);
       }
     };
 
@@ -386,7 +404,8 @@ export function RealtimeConversationPanel({
         window.clearTimeout(timeoutId);
       }
     };
-  }, [isActive, onShareVisionFrame]);
+  }, [isActive, onShareVisionFrame, visionFrameIntervalMs]);
+  */
 
   return (
     <div className="rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/40">

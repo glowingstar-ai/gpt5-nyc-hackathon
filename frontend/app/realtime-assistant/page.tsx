@@ -61,7 +61,9 @@ export default function RealtimeAssistantPage(): JSX.Element {
   const [shareStatus, setShareStatus] = useState<ShareStatus>("idle");
   const [shareMessage, setShareMessage] = useState<string | null>(null);
   const [lastSharedAt, setLastSharedAt] = useState<string | null>(null);
-  const [lastSharedPreview, setLastSharedPreview] = useState<string | null>(null);
+  const [lastSharedPreview, setLastSharedPreview] = useState<string | null>(
+    null
+  );
 
   useEffect(() => {
     return () => {
@@ -72,6 +74,7 @@ export default function RealtimeAssistantPage(): JSX.Element {
   }, []);
 
   const shareUiContext = useCallback(async ({ silent = false } = {}) => {
+    console.log(`[Vision Frame] shareUiContext called - silent: ${silent}`);
     const target = surfaceRef.current;
     if (!target) {
       const error = new Error("Context surface is not ready to capture yet.");
@@ -208,6 +211,7 @@ export default function RealtimeAssistantPage(): JSX.Element {
           <section className="relative z-10 mt-10 grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
             <RealtimeConversationPanel
               onShareVisionFrame={() => shareUiContext({ silent: true })}
+              visionFrameIntervalMs={15000} // 15 seconds - adjust this value to change frequency
             />
 
             <div className="space-y-5 rounded-2xl border border-slate-800/60 bg-slate-900/75 p-6 shadow-[0_25px_50px_-20px_rgba(15,23,42,0.65)] backdrop-blur">
@@ -240,9 +244,9 @@ export default function RealtimeAssistantPage(): JSX.Element {
                     />
                   </div>
                   <figcaption className="border-t border-slate-800/80 bg-slate-950/60 px-4 py-3 text-xs text-slate-400">
-                    This preview mirrors the exact screenshot transmitted to GPT-5 in the
-                    realtime session, helping you confirm the assistant sees the correct
-                    workspace.
+                    This preview mirrors the exact screenshot transmitted to
+                    GPT-5 in the realtime session, helping you confirm the
+                    assistant sees the correct workspace.
                   </figcaption>
                 </figure>
               ) : null}

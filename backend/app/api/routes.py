@@ -19,6 +19,8 @@ from app.api.dependencies import (
     get_research_service,
     get_settings,
     get_tutor_service,
+    get_vision_analyzer,
+    get_context_storage,
 )
 from app.core.config import Settings
 from app.schemas.auth import (
@@ -49,6 +51,8 @@ from app.services.realtime import RealtimeSessionClient, RealtimeSessionError
 from app.services.research import ResearchDiscoveryService
 from app.services.storage import S3AudioStorage, StorageServiceError
 from app.services.tutor import TutorModeService
+from app.services.vision import VisionAnalyzer, VisionAnalysisError
+from app.services.context_storage import ContextStorage
 
 router = APIRouter()
 
@@ -157,11 +161,42 @@ async def analyze_emotion(
 @router.post("/realtime/session", response_model=RealtimeSessionToken, tags=["realtime"])
 async def create_realtime_session(
     client: RealtimeSessionClient = Depends(get_realtime_client),
+    context_storage: ContextStorage = Depends(get_context_storage),
 ) -> RealtimeSessionToken:
-    """Return an ephemeral client secret for establishing WebRTC sessions."""
+    """Return an ephemeral client secret for establishing WebRTC sessions with visual context."""
+
+    # Get the most recent visual context
+    recent_context = None
+    for session_id in list(context_storage._storage.keys()):
+        context = context_storage.get_context(session_id)
+        if context and (recent_context is None or context.timestamp > recent_context.timestamp):
+            recent_context = context
+
+    # Enhance instructions with visual context if available
+    enhanced_instructions = None
+    if recent_context:
+        enhanced_instructions = f"""You are an AI assistant that can see and understand the user's current screen context. 
+
+Current visual context:
+- Description: {recent_context.description}
+- Key elements: {', '.join(recent_context.key_elements)}
+- User intent: {recent_context.user_intent or 'Not specified'}
+- Actionable items: {', '.join(recent_context.actionable_items)}
+
+Use this visual context to provide more relevant and helpful responses. You can reference what you see on their screen, help them with tasks they're working on, or answer questions about the content they're viewing. Be specific about what you observe and how you can assist them with their current activity."""
 
     try:
-        session = await client.create_ephemeral_session()
+        # Create a new client with enhanced instructions
+        enhanced_client = RealtimeSessionClient(
+            api_key=client.api_key,
+            base_url=client.base_url,
+            model=client.model,
+            voice=client.voice,
+            instructions=enhanced_instructions or client.instructions,
+            timeout=client.timeout,
+        )
+        
+        session = await enhanced_client.create_ephemeral_session()
     except RealtimeSessionError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
@@ -176,8 +211,12 @@ async def create_realtime_session(
 
 
 @router.post("/vision/frame", response_model=VisionFrameResponse, tags=["vision"])
-async def accept_vision_frame(payload: VisionFrameRequest) -> VisionFrameResponse:
-    """Accept a base64-encoded frame from the client camera or UI surface."""
+async def accept_vision_frame(
+    payload: VisionFrameRequest,
+    analyzer: VisionAnalyzer = Depends(get_vision_analyzer),
+    context_storage: ContextStorage = Depends(get_context_storage),
+) -> VisionFrameResponse:
+    """Accept a base64-encoded frame from the client camera or UI surface and analyze it."""
 
     try:
         decoded = base64.b64decode(payload.image_base64, validate=True)
@@ -185,6 +224,23 @@ async def accept_vision_frame(payload: VisionFrameRequest) -> VisionFrameRespons
         raise HTTPException(status_code=400, detail="Invalid base64-encoded image") from exc
 
     received_at = datetime.now(timezone.utc)
+
+    # Analyze the screenshot for context
+    try:
+        context = await analyzer.analyze_screenshot(
+            image_base64=payload.image_base64,
+            source=payload.source,
+            captured_at=payload.captured_at,
+        )
+        
+        # Store context for potential use in realtime conversations
+        # Use a session ID based on timestamp for now (in production, use actual session ID)
+        session_id = f"session_{int(received_at.timestamp())}"
+        context_storage.store_context(session_id, context)
+        
+    except VisionAnalysisError as exc:
+        # Log the error but don't fail the request
+        print(f"Vision analysis failed: {exc}")
 
     return VisionFrameResponse(
         status="accepted",

@@ -12,6 +12,8 @@ from app.services.realtime import RealtimeSessionClient
 from app.services.research import ResearchDiscoveryService
 from app.services.storage import S3AudioStorage, StorageServiceError
 from app.services.tutor import TutorModeService
+from app.services.vision import VisionAnalyzer
+from app.services.context_storage import get_context_storage
 
 
 def get_settings() -> Settings:
@@ -180,5 +182,29 @@ def get_payment_service() -> StripePaymentService:
 
     try:
         return _get_payment_service()
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@lru_cache
+def _get_vision_analyzer() -> VisionAnalyzer:
+    """Return a singleton vision analyzer instance."""
+    
+    settings = _get_settings()
+    if not settings.openai_api_key:
+        raise ValueError("OpenAI API key is not configured for vision analysis")
+    
+    return VisionAnalyzer(
+        api_key=settings.openai_api_key,
+        base_url=settings.openai_api_base_url,
+        model="gpt-4o",
+    )
+
+
+def get_vision_analyzer() -> VisionAnalyzer:
+    """FastAPI dependency that provides the vision analyzer."""
+    
+    try:
+        return _get_vision_analyzer()
     except ValueError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc

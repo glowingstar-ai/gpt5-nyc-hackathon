@@ -89,7 +89,7 @@ export default function RealtimeAssistantPage(): JSX.Element {
     }
 
     setShareStatus("capturing");
-    setShareMessage("Capturing your current workspace…");
+    setShareMessage("Capturing and analyzing your current workspace…");
 
     try {
       const canvas = await html2canvas(target, {
@@ -122,7 +122,9 @@ export default function RealtimeAssistantPage(): JSX.Element {
       const timestamp = new Date().toISOString();
       setLastSharedAt(timestamp);
       setShareStatus("shared");
-      setShareMessage("Shared the current view with the assistant.");
+      setShareMessage(
+        "Analyzed and shared your workspace context with the assistant."
+      );
 
       timeoutRef.current = window.setTimeout(() => {
         setShareStatus("idle");
@@ -144,12 +146,12 @@ export default function RealtimeAssistantPage(): JSX.Element {
 
   const lastSharedLabel = useMemo(
     () => formatTimestamp(lastSharedAt),
-    [lastSharedAt],
+    [lastSharedAt]
   );
 
   const statusCardTone = useMemo(
     () => STATUS_CARD_VARIANTS[shareStatus],
-    [shareStatus],
+    [shareStatus]
   );
 
   return (
@@ -168,7 +170,8 @@ export default function RealtimeAssistantPage(): JSX.Element {
                 Realtime assistant workspace
               </Heading>
               <Text className="mt-1 text-sm text-slate-300">
-                Speak with GPT-5 while sharing a live snapshot of the UI you are viewing.
+                Speak with GPT-5 while sharing a live snapshot of the UI you are
+                viewing.
               </Text>
             </div>
             <div className="flex items-center gap-3">
@@ -196,8 +199,10 @@ export default function RealtimeAssistantPage(): JSX.Element {
                 Visual context sharing
               </Heading>
               <Text className="text-sm leading-relaxed text-slate-300">
-                Capture the visible UI so the assistant understands what you see. A screenshot is
-                sent automatically before each call, and you can refresh it at any time.
+                Capture the visible UI so the assistant understands what you
+                see. Screenshots are automatically analyzed using AI vision and
+                sent before each conversation, giving the assistant full context
+                about your current workspace, applications, and tasks.
               </Text>
               <div
                 className={`space-y-2 rounded-xl border px-4 py-3 transition-colors ${statusCardTone}`}
@@ -219,13 +224,17 @@ export default function RealtimeAssistantPage(): JSX.Element {
                   disabled={shareStatus === "capturing"}
                   className="flex-1 bg-emerald-400 text-slate-950 shadow-[0_16px_40px_-24px_rgba(16,185,129,0.9)] transition-transform hover:-translate-y-0.5 hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-80"
                 >
-                  {shareStatus === "capturing" ? "Capturing…" : "Share current view"}
+                  {shareStatus === "capturing"
+                    ? "Analyzing…"
+                    : "Share current view"}
                 </Button>
                 <Button
                   variant="outline"
                   onClick={() => {
                     if (lastSharedAt) {
-                      setShareMessage("The assistant has the latest screenshot.");
+                      setShareMessage(
+                        "The assistant has the latest analyzed context."
+                      );
                       setShareStatus("shared");
                       if (timeoutRef.current) {
                         window.clearTimeout(timeoutRef.current);
@@ -243,7 +252,9 @@ export default function RealtimeAssistantPage(): JSX.Element {
                 </Button>
               </div>
               <Text className="text-xs text-slate-400">
-                Screenshots remain in-memory for prototyping purposes and are not persisted.
+                Screenshots are analyzed using AI vision and context is shared
+                with the assistant. Data remains in-memory for prototyping
+                purposes and is not persisted.
               </Text>
             </div>
           </section>

@@ -4,7 +4,12 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.api.dependencies import get_emotion_analyzer, get_realtime_client, get_settings
+from app.api.dependencies import (
+    get_emotion_analyzer,
+    get_realtime_client,
+    get_settings,
+    get_tutor_service,
+)
 from app.core.config import Settings
 from app.schemas.emotion import EmotionAnalysisRequest, EmotionAnalysisResponse
 from app.schemas.health import HealthResponse
@@ -13,8 +18,10 @@ from app.schemas.realtime import (
     VisionFrameRequest,
     VisionFrameResponse,
 )
+from app.schemas.tutor import TutorModeRequest, TutorModeResponse
 from app.services.emotion import EmotionAnalyzer
 from app.services.realtime import RealtimeSessionClient, RealtimeSessionError
+from app.services.tutor import TutorModeService
 
 router = APIRouter()
 
@@ -78,3 +85,13 @@ async def accept_vision_frame(payload: VisionFrameRequest) -> VisionFrameRespons
         captured_at=payload.captured_at,
         received_at=received_at,
     )
+
+
+@router.post("/tutor/mode", response_model=TutorModeResponse, tags=["tutor"])
+async def create_tutor_mode_plan(
+    payload: TutorModeRequest,
+    tutor_service: TutorModeService = Depends(get_tutor_service),
+) -> TutorModeResponse:
+    """Create a BabyAGI-inspired tutoring plan powered by GPT-5."""
+
+    return await tutor_service.generate_plan(payload)

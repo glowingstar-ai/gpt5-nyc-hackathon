@@ -354,6 +354,40 @@ export function RealtimeConversationPanel({
     };
   }, [resetConnection]);
 
+  useEffect(() => {
+    if (!isActive || !onShareVisionFrame) {
+      return undefined;
+    }
+
+    let isCancelled = false;
+    let timeoutId: number | undefined;
+
+    const shareLoop = async () => {
+      if (isCancelled) {
+        return;
+      }
+
+      try {
+        await onShareVisionFrame();
+      } catch (err) {
+        console.warn("Unable to share periodic context frame", err);
+      }
+
+      if (!isCancelled) {
+        timeoutId = window.setTimeout(shareLoop, 2000);
+      }
+    };
+
+    void shareLoop();
+
+    return () => {
+      isCancelled = true;
+      if (timeoutId !== undefined) {
+        window.clearTimeout(timeoutId);
+      }
+    };
+  }, [isActive, onShareVisionFrame]);
+
   return (
     <div className="rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/40">
       <Heading as="h2" size="4" className="mb-3 font-heading">

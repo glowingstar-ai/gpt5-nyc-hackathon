@@ -14,7 +14,7 @@ class Settings(BaseSettings):
         default="https://api.openai.com/v1", alias="OPENAI_API_BASE_URL"
     )
     openai_realtime_model: str = Field(
-        default="gpt-4o-realtime-preview-2024-12-17", alias="OPENAI_REALTIME_MODEL"
+        default="gpt-realtime", alias="OPENAI_REALTIME_MODEL"
     )
     openai_realtime_voice: str = Field(default="verse", alias="OPENAI_REALTIME_VOICE")
     openai_realtime_instructions: str | None = Field(

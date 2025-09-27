@@ -20,6 +20,15 @@ class Settings(BaseSettings):
     openai_realtime_instructions: str | None = Field(
         default=None, alias="OPENAI_REALTIME_INSTRUCTIONS"
     )
+    openai_annotation_model: str = Field(
+        default="gpt-5.0", alias="OPENAI_ANNOTATION_MODEL"
+    )
+    aws_access_key_id: str | None = Field(default=None, alias="AWS_ACCESS_KEY_ID")
+    aws_secret_access_key: str | None = Field(
+        default=None, alias="AWS_SECRET_ACCESS_KEY"
+    )
+    aws_region_name: str | None = Field(default=None, alias="AWS_REGION")
+    aws_s3_bucket: str | None = Field(default=None, alias="AWS_S3_BUCKET")
 
     model_config = {
         "env_file": ".env",

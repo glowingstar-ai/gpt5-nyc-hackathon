@@ -7,14 +7,15 @@ import { inter, manrope, plexSans } from "@/lib/fonts";
 
 export const metadata: Metadata = {
   title: {
-    default: "GPT5 Hackathon Starter",
-    template: "%s | GPT5 Hackathon"
+    default: "EmpathIQ Experience Studio",
+    template: "%s | EmpathIQ Studio",
   },
-  description: "A modern monorepo starter with Next.js and FastAPI."
+  description:
+    "Command center for emotionally intelligent customer experiences—monitor sessions, review insights, and launch guided playbooks.",
 };
 
 export default function RootLayout({
-  children
+  children,
 }: Readonly<{ children: ReactNode }>) {
   return (
     <html

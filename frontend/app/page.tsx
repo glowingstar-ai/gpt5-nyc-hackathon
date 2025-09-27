@@ -1,830 +1,255 @@
-"use client";
-
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Theme, Heading, Text } from "@radix-ui/themes";
-import "@radix-ui/themes/styles.css";
-
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import RealtimeConversationPanel from "@/components/realtime-conversation";
+import {
+  Activity,
+  Sparkles,
+  Radar,
+  ArrowUpRight,
+  MessageCircle,
+  Brain,
+} from "lucide-react";
 
-type EmotionProbabilities = Record<string, number>;
-
-type EmotionAnalysisResponse = {
-  taxonomy: string;
-  dominant_emotion: string;
-  confidence: number;
-  aggregated: EmotionProbabilities;
-  modality_breakdown: {
-    text?: EmotionProbabilities | null;
-    voice?: EmotionProbabilities | null;
-    video?: EmotionProbabilities | null;
-  };
-  modality_weights: Record<string, number>;
-};
-
-type VoiceSnapshot = {
-  energy: number;
-  pitch: number;
-  tempo: number;
-  jitter: number;
-  confidence: number;
-};
-
-type VideoSnapshot = {
-  smile: number;
-  browRaise: number;
-  eyeOpenness: number;
-  headMovement: number;
-  engagement: number;
-};
-
-type FaceLandmarkPoint = { x: number; y: number; z?: number };
-
-type FaceLandmarkerResult = {
-  faceLandmarks: Array<Array<FaceLandmarkPoint>>;
-};
-
-type FaceLandmarker = {
-  detectForVideo: (
-    video: HTMLVideoElement,
-    timestampMs: number
-  ) => FaceLandmarkerResult | undefined;
-  close: () => void;
-};
-
-type VisionFileset = unknown;
-
-type TasksVisionModule = {
-  FaceLandmarker: {
-    createFromOptions: (
-      filesetResolver: VisionFileset,
-      options: {
-        baseOptions: { modelAssetPath: string };
-        runningMode: "IMAGE" | "VIDEO";
-        numFaces?: number;
-      }
-    ) => Promise<FaceLandmarker>;
-  };
-  FilesetResolver: {
-    forVisionTasks: (wasmPath: string) => Promise<VisionFileset>;
-  };
-};
-
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
-
-const EMOTION_ORDER = [
-  "joy",
-  "trust",
-  "fear",
-  "surprise",
-  "sadness",
-  "disgust",
-  "anger",
-  "anticipation",
-  "neutral"
+const featureCards = [
+  {
+    name: "Emotion Console",
+    description:
+      "Monitor real-time multimodal cues from your conversations with responsive visual analytics.",
+    href: "/emotion-console",
+    icon: Activity,
+    accent: "from-amber-400/80 to-orange-500/80",
+    pill: "Live Analysis",
+  },
+  {
+    name: "Session Insights",
+    description:
+      "Review rich summaries, transcript intelligence, and top opportunities pulled from your captured sessions.",
+    href: "/session-insights",
+    icon: Brain,
+    accent: "from-violet-400/80 to-fuchsia-500/80",
+    pill: "AI Summaries",
+  },
+  {
+    name: "Agent Playbooks",
+    description:
+      "Operationalize best practices with collaborative playbooks, prompts, and workflows tuned to each customer moment.",
+    href: "/agent-playbooks",
+    icon: MessageCircle,
+    accent: "from-emerald-400/80 to-teal-500/80",
+    pill: "Guided Actions",
+  },
 ];
 
-const EMOTION_COLORS: Record<string, string> = {
-  joy: "bg-amber-400",
-  trust: "bg-emerald-400",
-  fear: "bg-cyan-500",
-  surprise: "bg-indigo-400",
-  sadness: "bg-blue-500",
-  disgust: "bg-lime-500",
-  anger: "bg-rose-500",
-  anticipation: "bg-orange-400",
-  neutral: "bg-slate-400"
-};
-
-const MEDIAPIPE_WASM_BASE = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.4/wasm";
-const MEDIAPIPE_FACE_MODEL_URL =
-  "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task";
-
-const clamp = (value: number, min = 0, max = 1) => Math.min(Math.max(value, min), max);
-
-const autoCorrelate = (buffer: Float32Array, sampleRate: number): number => {
-  const SIZE = buffer.length;
-  const MAX_SAMPLES = Math.floor(SIZE / 2);
-  let bestOffset = -1;
-  let bestCorrelation = 0;
-  let rms = 0;
-  for (let i = 0; i < SIZE; i += 1) {
-    const val = buffer[i];
-    rms += val * val;
-  }
-  rms = Math.sqrt(rms / SIZE);
-  if (rms < 0.01) return 0;
-
-  let lastCorrelation = 1;
-  for (let offset = 1; offset < MAX_SAMPLES; offset += 1) {
-    let correlation = 0;
-    for (let i = 0; i < MAX_SAMPLES; i += 1) {
-      correlation += Math.abs(buffer[i] - buffer[i + offset]);
-    }
-    correlation = 1 - correlation / MAX_SAMPLES;
-    if (correlation > 0.9 && correlation > lastCorrelation) {
-      bestCorrelation = correlation;
-      bestOffset = offset;
-    } else if (correlation < lastCorrelation) {
-      break;
-    }
-    lastCorrelation = correlation;
-  }
-
-  if (bestOffset === -1) {
-    return 0;
-  }
-
-  return sampleRate / bestOffset;
-};
-
-const formatPercent = (value: number) => `${Math.round(value * 100)}%`;
-
-const formatNumber = (value: number, decimals = 2) => value.toFixed(decimals);
-
-export default function EmotionConsole(): JSX.Element {
-  const videoRef = useRef<HTMLVideoElement | null>(null);
-  const mediaStreamRef = useRef<MediaStream | null>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const audioRafRef = useRef<number>();
-  const videoRafRef = useRef<number>();
-  const pollIntervalRef = useRef<number>();
-  const photoIntervalRef = useRef<number>();
-  const captureCanvasRef = useRef<HTMLCanvasElement | null>(null);
-  const frameUploadInFlightRef = useRef(false);
-  const detectorRef = useRef<FaceLandmarker | null>(null);
-  const voiceFeaturesRef = useRef({
-    energy: 0,
-    pitch: 0,
-    tempo: 0,
-    jitter: 0,
-    confidence: 0,
-    lastPitch: 0,
-    updatedAt: 0
-  });
-  const videoFeaturesRef = useRef({
-    smile: 0,
-    browRaise: 0,
-    eyeOpenness: 0,
-    headMovement: 0,
-    engagement: 0,
-    updatedAt: 0,
-    lastNoseX: 0,
-    lastNoseY: 0
-  });
-  const isRunningRef = useRef(false);
-  const textRef = useRef("");
-  const lastAudioSnapshotRef = useRef(0);
-  const lastVideoSnapshotRef = useRef(0);
-
-  const [isRunning, setIsRunning] = useState(false);
-  const [status, setStatus] = useState<string>("Idle – start a capture session to analyze emotion signals.");
-  const [error, setError] = useState<string | null>(null);
-  const [textInput, setTextInput] = useState("");
-  const [voiceSnapshot, setVoiceSnapshot] = useState<VoiceSnapshot | null>(null);
-  const [videoSnapshot, setVideoSnapshot] = useState<VideoSnapshot | null>(null);
-  const [analysis, setAnalysis] = useState<EmotionAnalysisResponse | null>(null);
-
-  useEffect(() => {
-    textRef.current = textInput;
-  }, [textInput]);
-
-  useEffect(() => {
-    isRunningRef.current = isRunning;
-  }, [isRunning]);
-
-  const cleanup = useCallback(async () => {
-    window.clearInterval(pollIntervalRef.current);
-    window.clearInterval(photoIntervalRef.current);
-    cancelAnimationFrame(audioRafRef.current ?? 0);
-    cancelAnimationFrame(videoRafRef.current ?? 0);
-    pollIntervalRef.current = undefined;
-    photoIntervalRef.current = undefined;
-    audioRafRef.current = undefined;
-    videoRafRef.current = undefined;
-    captureCanvasRef.current = null;
-    frameUploadInFlightRef.current = false;
-
-    if (detectorRef.current) {
-      try {
-        detectorRef.current.close();
-      } catch (err) {
-        console.error("Failed to release face landmarker", err);
-      }
-      detectorRef.current = null;
-    }
-
-    const analyser = analyserRef.current;
-    analyserRef.current = null;
-    if (analyser) {
-      analyser.disconnect();
-    }
-
-    const audioContext = audioContextRef.current;
-    audioContextRef.current = null;
-    if (audioContext) {
-      await audioContext.close();
-    }
-
-    const stream = mediaStreamRef.current;
-    mediaStreamRef.current = null;
-    stream?.getTracks().forEach((track) => track.stop());
-
-    setVoiceSnapshot(null);
-    setVideoSnapshot(null);
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      cleanup().catch(() => undefined);
-    };
-  }, [cleanup]);
-
-  const processAudio = useCallback(() => {
-    const analyser = analyserRef.current;
-    const audioContext = audioContextRef.current;
-    if (!analyser || !audioContext || !isRunningRef.current) {
-      return;
-    }
-
-    const bufferLength = analyser.fftSize;
-    const timeDomain = new Float32Array(bufferLength);
-    analyser.getFloatTimeDomainData(timeDomain);
-
-    let sumSquares = 0;
-    let zeroCrossings = 0;
-    let previousSample = timeDomain[0];
-    for (let i = 0; i < bufferLength; i += 1) {
-      const sample = timeDomain[i];
-      sumSquares += sample * sample;
-      if ((sample >= 0 && previousSample < 0) || (sample < 0 && previousSample >= 0)) {
-        zeroCrossings += 1;
-      }
-      previousSample = sample;
-    }
-
-    const energy = Math.sqrt(sumSquares / bufferLength);
-    const pitch = autoCorrelate(timeDomain, audioContext.sampleRate);
-    const durationSeconds = bufferLength / audioContext.sampleRate;
-    const zeroCrossRate = zeroCrossings / Math.max(durationSeconds, 1e-6);
-    const tempo = clamp(zeroCrossRate / 250, 0, 6);
-
-    const lastPitch = voiceFeaturesRef.current.lastPitch;
-    const jitter = pitch > 0 && lastPitch > 0 ? clamp(Math.abs(pitch - lastPitch) / Math.max(pitch, lastPitch), 0, 1) : 0;
-    const confidence = clamp(energy * 3, 0, 1);
-
-    voiceFeaturesRef.current = {
-      energy,
-      pitch,
-      tempo,
-      jitter,
-      confidence,
-      lastPitch: pitch || lastPitch,
-      updatedAt: Date.now()
-    };
-
-    const now = performance.now();
-    if (now - lastAudioSnapshotRef.current > 250) {
-      lastAudioSnapshotRef.current = now;
-      setVoiceSnapshot({ energy, pitch, tempo, jitter, confidence });
-    }
-
-    audioRafRef.current = requestAnimationFrame(processAudio);
-  }, []);
-
-  const processVideo = useCallback(async () => {
-    if (!detectorRef.current || !isRunningRef.current) {
-      return;
-    }
-
-    const video = videoRef.current;
-    if (!video || video.readyState < 2) {
-      videoRafRef.current = requestAnimationFrame(() => {
-        processVideo().catch(() => undefined);
-      });
-      return;
-    }
-
-    try {
-      const detector = detectorRef.current;
-      if (!detector) {
-        return;
-      }
-
-      const result = detector.detectForVideo(video, performance.now());
-      const landmarks = result?.faceLandmarks?.[0];
-
-      if (landmarks && landmarks.length > 0) {
-        const width = video.videoWidth || video.clientWidth || 0;
-        const height = video.videoHeight || video.clientHeight || 0;
-
-        const getPoint = (index: number) => {
-          const point = landmarks[index];
-          return {
-            x: point.x * width,
-            y: point.y * height
-          };
-        };
-
-        const distance = (aIndex: number, bIndex: number) => {
-          const a = getPoint(aIndex);
-          const b = getPoint(bIndex);
-          const dx = a.x - b.x;
-          const dy = a.y - b.y;
-          return Math.sqrt(dx * dx + dy * dy);
-        };
-
-        const faceWidth = distance(33, 263);
-        const mouthWidth = distance(61, 291);
-        const smile = clamp((mouthWidth / Math.max(faceWidth, 1e-3) - 0.32) * 5);
-        const eyeLeft = distance(159, 145);
-        const eyeRight = distance(386, 374);
-        const eyeOpenness = clamp(((eyeLeft + eyeRight) / 2 / Math.max(faceWidth, 1e-3) - 0.025) * 18);
-        const browLeft = distance(70, 159);
-        const browRight = distance(300, 386);
-        const browRaise = clamp(((browLeft + browRight) / 2 / Math.max(faceWidth, 1e-3) - 0.05) * 12);
-
-        const nose = getPoint(1);
-        const lastNoseX = videoFeaturesRef.current.lastNoseX;
-        const lastNoseY = videoFeaturesRef.current.lastNoseY;
-        const movement =
-          lastNoseX === 0 && lastNoseY === 0
-            ? 0
-            : Math.sqrt((nose.x - lastNoseX) ** 2 + (nose.y - lastNoseY) ** 2);
-        const headMovement = clamp(movement * 60);
-
-        const engagement = clamp((smile + browRaise + eyeOpenness + headMovement) / 4);
-
-        videoFeaturesRef.current = {
-          smile,
-          browRaise,
-          eyeOpenness,
-          headMovement,
-          engagement,
-          updatedAt: Date.now(),
-          lastNoseX: nose.x,
-          lastNoseY: nose.y
-        };
-
-        const now = performance.now();
-        if (now - lastVideoSnapshotRef.current > 250) {
-          lastVideoSnapshotRef.current = now;
-          setVideoSnapshot({ smile, browRaise, eyeOpenness, headMovement, engagement });
-        }
-      }
-    } catch (err) {
-      console.error("Video processing error", err);
-    }
-
-    videoRafRef.current = requestAnimationFrame(() => {
-      processVideo().catch(() => undefined);
-    });
-  }, []);
-
-  const initializeDetector = useCallback(async () => {
-    if (detectorRef.current) {
-      return detectorRef.current;
-    }
-
-    const [{ FaceLandmarker, FilesetResolver }] = await Promise.all([
-      import("@mediapipe/tasks-vision") as Promise<TasksVisionModule>
-    ]);
-
-    const filesetResolver = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_BASE);
-
-    const detector = await FaceLandmarker.createFromOptions(filesetResolver, {
-      baseOptions: {
-        modelAssetPath: MEDIAPIPE_FACE_MODEL_URL
-      },
-      runningMode: "VIDEO",
-      numFaces: 1
-    });
-
-    detectorRef.current = detector;
-    return detector;
-  }, []);
-
-  const captureAndSendFrame = useCallback(async () => {
-    if (!isRunningRef.current || frameUploadInFlightRef.current) {
-      return;
-    }
-
-    const video = videoRef.current;
-    if (!video || video.readyState < 2) {
-      return;
-    }
-
-    const width = video.videoWidth || video.clientWidth;
-    const height = video.videoHeight || video.clientHeight;
-    if (!width || !height) {
-      return;
-    }
-
-    const canvas = captureCanvasRef.current ?? document.createElement("canvas");
-    if (!captureCanvasRef.current) {
-      captureCanvasRef.current = canvas;
-    }
-
-    canvas.width = width;
-    canvas.height = height;
-
-    const context = canvas.getContext("2d");
-    if (!context) {
-      return;
-    }
-
-    context.drawImage(video, 0, 0, width, height);
-
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.75);
-    const base64 = dataUrl.split(",")[1];
-    if (!base64) {
-      return;
-    }
-
-    frameUploadInFlightRef.current = true;
-    try {
-      await fetch(`${API_BASE}/vision/frame`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          image_base64: base64,
-          captured_at: new Date().toISOString(),
-        }),
-      });
-    } catch (err) {
-      console.error("Failed to upload camera frame", err);
-    } finally {
-      frameUploadInFlightRef.current = false;
-    }
-  }, []);
-
-  const sendAnalysis = useCallback(async () => {
-    if (!isRunningRef.current) {
-      return;
-    }
-
-    const now = Date.now();
-    const voiceFeatures = voiceFeaturesRef.current;
-    const videoFeatures = videoFeaturesRef.current;
-
-    const payload: Record<string, unknown> = {
-      text: textRef.current.trim() ? textRef.current.trim() : null,
-      metadata: { window_ms: 3000, generated_at: new Date(now).toISOString() }
-    };
-
-    if (now - voiceFeatures.updatedAt < 1500) {
-      payload.voice = {
-        energy: voiceFeatures.energy,
-        pitch: voiceFeatures.pitch,
-        tempo: voiceFeatures.tempo,
-        jitter: voiceFeatures.jitter,
-        confidence: voiceFeatures.confidence
-      };
-    }
-
-    if (now - videoFeatures.updatedAt < 1500) {
-      payload.video = {
-        smile: videoFeatures.smile,
-        brow_raise: videoFeatures.browRaise,
-        eye_openness: videoFeatures.eyeOpenness,
-        head_movement: videoFeatures.headMovement,
-        engagement: videoFeatures.engagement
-      };
-    }
-
-    if (!payload.text && !payload.voice && !payload.video) {
-      return;
-    }
-
-    try {
-      const response = await fetch(`${API_BASE}/emotion/analyze`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload)
-      });
-
-      if (!response.ok) {
-        throw new Error(`Request failed with ${response.status}`);
-      }
-
-      const data = (await response.json()) as EmotionAnalysisResponse;
-      setAnalysis(data);
-      setStatus(
-        `Dominant emotion: ${capitalize(data.dominant_emotion)} (${formatPercent(data.confidence)})`
-      );
-      setError(null);
-    } catch (err) {
-      console.error("Emotion analysis request failed", err);
-      setError("Unable to reach the backend emotion service.");
-    }
-  }, []);
-
-  const startSession = useCallback(async () => {
-    if (isRunningRef.current) {
-      return;
-    }
-
-    try {
-      setStatus("Requesting camera and microphone access…");
-      setError(null);
-
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: { facingMode: "user" } });
-      mediaStreamRef.current = stream;
-
-      const video = videoRef.current;
-      if (video) {
-        video.srcObject = stream;
-        await video.play();
-      }
-
-      const audioContext = new AudioContext();
-      const analyser = audioContext.createAnalyser();
-      analyser.fftSize = 2048;
-      analyser.smoothingTimeConstant = 0.6;
-      const source = audioContext.createMediaStreamSource(stream);
-      source.connect(analyser);
-      audioContextRef.current = audioContext;
-      analyserRef.current = analyser;
-
-      voiceFeaturesRef.current = {
-        energy: 0,
-        pitch: 0,
-        tempo: 0,
-        jitter: 0,
-        confidence: 0,
-        lastPitch: 0,
-        updatedAt: Date.now()
-      };
-
-      videoFeaturesRef.current = {
-        smile: 0,
-        browRaise: 0,
-        eyeOpenness: 0,
-        headMovement: 0,
-        engagement: 0,
-        updatedAt: Date.now(),
-        lastNoseX: 0,
-        lastNoseY: 0
-      };
-
-      await initializeDetector();
-
-      setIsRunning(true);
-      isRunningRef.current = true;
-      setStatus("Collecting real-time signals…");
-      processAudio();
-      processVideo().catch(() => undefined);
-
-      photoIntervalRef.current = window.setInterval(() => {
-        captureAndSendFrame().catch(() => undefined);
-      }, 2000);
-
-      await captureAndSendFrame();
-      pollIntervalRef.current = window.setInterval(() => {
-        sendAnalysis().catch(() => undefined);
-      }, 3000);
-
-      await sendAnalysis();
-    } catch (err) {
-      console.error("Unable to start session", err);
-      setStatus("Unable to access required devices. Please ensure permissions are granted.");
-      setError("Camera or microphone access was denied.");
-      await cleanup();
-      setIsRunning(false);
-    }
-  }, [
-    captureAndSendFrame,
-    cleanup,
-    initializeDetector,
-    processAudio,
-    processVideo,
-    sendAnalysis,
-  ]);
-
-  const stopSession = useCallback(async () => {
-    if (!isRunningRef.current) {
-      return;
-    }
-
-    setIsRunning(false);
-    isRunningRef.current = false;
-    setStatus("Session paused. Start again to resume live analysis.");
-    await cleanup();
-  }, [cleanup]);
-
-  const breakdownCards = useMemo(() => {
-    if (!analysis) return null;
-
-    const entries: Array<{ modality: string; scores: EmotionProbabilities | null | undefined }> = [
-      { modality: "text", scores: analysis.modality_breakdown.text },
-      { modality: "voice", scores: analysis.modality_breakdown.voice },
-      { modality: "video", scores: analysis.modality_breakdown.video }
-    ];
-
-    return entries.map(({ modality, scores }) => (
-      <div key={modality} className="space-y-3 rounded-xl border border-slate-200 bg-white/70 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/40">
-        <div className="flex items-center justify-between">
-          <Heading as="h3" size="4" className="capitalize">
-            {modality}
-          </Heading>
-          <Text className="text-sm text-slate-500 dark:text-slate-400">
-            weight {formatPercent(analysis.modality_weights[modality] ?? 0)}
-          </Text>
-        </div>
-        {scores ? (
-          <div className="space-y-2">
-            {EMOTION_ORDER.map((emotion) => (
-              <EmotionBar key={emotion} emotion={emotion} value={scores[emotion] ?? 0} />
-            ))}
-          </div>
-        ) : (
-          <Text className="text-sm text-slate-500 dark:text-slate-400">No signal captured during this window.</Text>
-        )}
-      </div>
-    ));
-  }, [analysis]);
-
+const previewHighlights = [
+  {
+    title: "Realtime signal fusion",
+    description:
+      "Blend tone, sentiment, and facial cues into a single confidence pulse with adaptive weighting.",
+  },
+  {
+    title: "Coach moments that matter",
+    description:
+      "Surface coaching recommendations precisely when empathy or clarity begins to dip.",
+  },
+  {
+    title: "Design your own lenses",
+    description:
+      "Configure custom taxonomies and KPIs to match your team\'s playbook and voice.",
+  },
+];
+
+export default function LandingPage(): JSX.Element {
   return (
-    <Theme appearance="inherit">
-      <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-10 px-6 py-12">
-        <section className="space-y-4">
-          <Heading as="h1" size="8" className="font-heading text-balance text-3xl md:text-4xl">
-            Multi-modal emotion console
-          </Heading>
-          <Text as="p" size="4" className="max-w-3xl text-slate-600 dark:text-slate-300">
-            Capture voice, text, and facial movement in real time to infer emotions using a Plutchik-based taxonomy.
-            Start a session to stream local audio/video features to the FastAPI backend and watch the fused prediction
-            update live.
-          </Text>
-          <div className="flex flex-wrap items-center gap-3">
-            <Button onClick={startSession} disabled={isRunning}>
-              {isRunning ? "Capturing…" : "Start live capture"}
-            </Button>
-            <Button variant="outline" onClick={stopSession} disabled={!isRunning}>
-              Stop session
-            </Button>
-            <Text className="text-sm text-slate-500 dark:text-slate-400">{status}</Text>
-          </div>
-          {error ? <Text className="text-sm text-rose-500">{error}</Text> : null}
-        </section>
+    <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
+      <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900" aria-hidden />
+      <div className="pointer-events-none absolute -top-40 left-1/2 h-[32rem] w-[32rem] -translate-x-1/2 rounded-full bg-emerald-500/20 blur-3xl" />
+      <div className="pointer-events-none absolute -bottom-32 right-0 h-[28rem] w-[28rem] translate-x-1/3 rounded-full bg-purple-500/20 blur-3xl" />
 
-        <section className="grid gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
-          <div className="space-y-6">
-            <div className="rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/40">
-              <Heading as="h2" size="4" className="mb-3 font-heading">
-                Live camera feed
-              </Heading>
-              <div className="relative overflow-hidden rounded-xl bg-black">
-                <video ref={videoRef} playsInline muted className="h-64 w-full rounded-xl object-cover" />
+      <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col px-6 pb-24 pt-12 sm:px-12 lg:px-16">
+        <header className="flex items-center justify-between gap-6">
+          <Link href="/" className="group inline-flex items-center gap-2">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-lime-400 text-slate-950 font-semibold">
+              EI
+            </span>
+            <div className="flex flex-col">
+              <span className="text-sm uppercase tracking-[0.35em] text-slate-300">
+                EmpathIQ
+              </span>
+              <span className="text-lg font-semibold text-slate-50">
+                Experience Studio
+              </span>
+            </div>
+          </Link>
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" asChild className="text-slate-200 hover:text-slate-50">
+              <Link href="/emotion-console">Launch console</Link>
+            </Button>
+            <Button className="bg-emerald-400 text-slate-950 hover:bg-emerald-300" asChild>
+              <Link href="/session-insights">Explore insights</Link>
+            </Button>
+          </div>
+        </header>
+
+        <main className="mt-16 flex flex-1 flex-col gap-24 pb-12">
+          <section className="grid gap-12 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] lg:items-center">
+            <div className="space-y-8">
+              <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/30 bg-emerald-400/10 px-4 py-1 text-sm font-medium text-emerald-200">
+                <Sparkles className="h-4 w-4" />
+                Elevate every human moment
+              </span>
+              <h1 className="text-4xl font-semibold leading-tight text-slate-50 sm:text-5xl lg:text-6xl">
+                One intelligent workspace for real-time emotional intelligence.
+              </h1>
+              <p className="max-w-xl text-lg text-slate-300">
+                Navigate live conversations, replay coaching moments, and orchestrate customer-ready playbooks from a single, beautifully crafted studio experience.
+              </p>
+              <div className="flex flex-wrap gap-4">
+                <Button size="lg" asChild className="bg-emerald-400 text-slate-950 hover:bg-emerald-300">
+                  <Link href="/emotion-console" className="flex items-center gap-2">
+                    Start live session
+                    <ArrowUpRight className="h-4 w-4" />
+                  </Link>
+                </Button>
+                <Button
+                  variant="outline"
+                  size="lg"
+                  asChild
+                  className="border-slate-700 bg-slate-900/40 text-slate-200 hover:bg-slate-900/70"
+                >
+                  <Link href="#features" className="flex items-center gap-2">
+                    Discover the suite
+                    <Radar className="h-4 w-4" />
+                  </Link>
+                </Button>
               </div>
-              {videoSnapshot ? (
-                <SignalList
-                  title="Facial features"
-                  signals={{
-                    smile: videoSnapshot.smile,
-                    "brow raise": videoSnapshot.browRaise,
-                    "eye openness": videoSnapshot.eyeOpenness,
-                    "head movement": videoSnapshot.headMovement,
-                    engagement: videoSnapshot.engagement
-                  }}
-                />
-              ) : (
-                <Text className="text-sm text-slate-500 dark:text-slate-400">
-                  Enable the session to capture facial expression metrics.
-                </Text>
-              )}
             </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/40">
-              <Heading as="h2" size="4" className="mb-3 font-heading">
-                Text transcript
-              </Heading>
-              <textarea
-                value={textInput}
-                onChange={(event) => setTextInput(event.target.value)}
-                className="min-h-[140px] w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-950"
-                placeholder="Type or paste text captured from your conversation…"
-              />
-              <Text className="mt-2 block text-xs text-slate-500 dark:text-slate-400">
-                The full transcript is sent with each inference window to enrich the prediction.
-              </Text>
-            </div>
-          </div>
-
-          <div className="space-y-6">
-            <div className="rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/40">
-              <Heading as="h2" size="4" className="mb-3 font-heading">
-                Voice metrics
-              </Heading>
-              {voiceSnapshot ? (
-                <SignalList
-                  title="Acoustic features"
-                  signals={{
-                    energy: voiceSnapshot.energy,
-                    pitch: voiceSnapshot.pitch,
-                    tempo: voiceSnapshot.tempo,
-                    jitter: voiceSnapshot.jitter,
-                    confidence: voiceSnapshot.confidence
-                  }}
-                  formatter={{
-                    pitch: (value) => `${formatNumber(value, 0)} Hz`,
-                    energy: (value) => formatNumber(value, 3),
-                    tempo: (value) => `${formatNumber(value, 2)} wps`,
-                    jitter: (value) => formatNumber(value, 2),
-                    confidence: (value) => formatPercent(value)
-                  }}
-                />
-              ) : (
-                <Text className="text-sm text-slate-500 dark:text-slate-400">
-                  Start capturing to compute RMS energy, pitch, tempo, and jitter.
-                </Text>
-              )}
-          </div>
-
-          {analysis ? (
-            <div className="space-y-5 rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/40">
-              <div className="flex items-center justify-between">
-                  <div>
-                    <Heading as="h2" size="4" className="font-heading capitalize">
-                      {analysis.dominant_emotion}
-                    </Heading>
-                    <Text className="text-sm text-slate-500 dark:text-slate-400">
-                      Confidence {formatPercent(analysis.confidence)}
-                    </Text>
-                  </div>
-                  <span className="rounded-full bg-slate-900/5 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-slate-600 dark:bg-slate-100/10 dark:text-slate-200">
-                    Taxonomy · {analysis.taxonomy.replace("_", " ")}
+            <div className="relative">
+              <div className="absolute -inset-4 rounded-3xl bg-gradient-to-br from-emerald-400/30 via-slate-200/10 to-transparent blur-3xl" />
+              <div className="relative rounded-3xl border border-slate-800 bg-slate-900/60 p-6 shadow-2xl backdrop-blur-xl">
+                <div className="flex items-center justify-between text-sm text-slate-400">
+                  <span className="inline-flex items-center gap-2">
+                    <div className="h-2.5 w-2.5 rounded-full bg-emerald-400" />
+                    Live sentiment stream
+                  </span>
+                  <span className="inline-flex items-center gap-2 text-emerald-300">
+                    <Activity className="h-4 w-4" />
+                    Stable
                   </span>
                 </div>
-
-                <div className="space-y-2">
-                  {EMOTION_ORDER.map((emotion) => (
-                    <EmotionBar key={emotion} emotion={emotion} value={analysis.aggregated[emotion] ?? 0} />
+                <div className="mt-6 space-y-6">
+                  {previewHighlights.map((item) => (
+                    <div key={item.title} className="rounded-2xl border border-slate-800 bg-slate-950/30 p-5">
+                      <h3 className="text-lg font-semibold text-slate-50">
+                        {item.title}
+                      </h3>
+                      <p className="mt-2 text-sm text-slate-400">{item.description}</p>
+                    </div>
                   ))}
                 </div>
               </div>
-            ) : (
-              <div className="rounded-2xl border border-dashed border-slate-300 bg-white/50 p-4 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-900/20 dark:text-slate-400">
-                Aggregated predictions will appear here once the backend returns the first inference window.
+            </div>
+          </section>
+
+          <section id="features" className="space-y-8">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <p className="text-sm uppercase tracking-[0.3em] text-slate-400">
+                  Navigation
+                </p>
+                <h2 className="mt-2 text-3xl font-semibold text-slate-50">
+                  Dive into the experiences built for you
+                </h2>
               </div>
-            )}
+              <p className="max-w-md text-sm text-slate-400">
+                Each workspace is crafted to highlight the nuance of emotional intelligence—choose where to go next and continue the journey.
+              </p>
+            </div>
+            <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
+              {featureCards.map((feature) => (
+                <Link key={feature.name} href={feature.href} className="group">
+                  <div className="h-full rounded-3xl border border-slate-800 bg-slate-900/60 p-6 shadow-lg transition-transform duration-300 group-hover:-translate-y-1 group-hover:shadow-emerald-500/20">
+                    <div
+                      className={`inline-flex items-center gap-2 rounded-full bg-gradient-to-r ${feature.accent} px-4 py-1 text-xs font-medium uppercase tracking-[0.25em] text-slate-950`}
+                    >
+                      {feature.pill}
+                    </div>
+                    <div className="mt-6 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-950/60 text-emerald-300">
+                      <feature.icon className="h-6 w-6" />
+                    </div>
+                    <h3 className="mt-6 text-2xl font-semibold text-slate-50">
+                      {feature.name}
+                    </h3>
+                    <p className="mt-3 text-sm leading-relaxed text-slate-400">
+                      {feature.description}
+                    </p>
+                    <div className="mt-6 inline-flex items-center gap-2 text-sm font-medium text-emerald-300">
+                      Enter experience
+                      <ArrowUpRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+                    </div>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          </section>
 
-            <RealtimeConversationPanel onShareVisionFrame={captureAndSendFrame} />
+          <section className="grid gap-8 rounded-3xl border border-slate-800 bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 p-8 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] md:p-12">
+            <div className="space-y-5">
+              <p className="text-sm uppercase tracking-[0.35em] text-slate-400">
+                Why teams choose EmpathIQ
+              </p>
+              <h2 className="text-3xl font-semibold text-slate-50">
+                Purpose-built for leaders who design remarkable customer journeys.
+              </h2>
+              <p className="text-sm leading-relaxed text-slate-400">
+                We combine advanced signal processing with playful, human-centered design so your team can see, feel, and respond to every emotional beat.
+              </p>
+              <div className="flex flex-col gap-4 sm:flex-row">
+                <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-5">
+                  <p className="text-xs uppercase tracking-[0.25em] text-slate-500">
+                    Adaptive intelligence
+                  </p>
+                  <p className="mt-2 text-lg font-semibold text-slate-50">Dynamic weighting</p>
+                  <p className="mt-1 text-sm text-slate-400">
+                    Our console adjusts to the strongest signals in the room so you always see what matters most.
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-5">
+                  <p className="text-xs uppercase tracking-[0.25em] text-slate-500">
+                    Crafted experiences
+                  </p>
+                  <p className="mt-2 text-lg font-semibold text-slate-50">Delightful micro-interactions</p>
+                  <p className="mt-1 text-sm text-slate-400">
+                    Subtle animations and gradients guide your focus without overwhelming your senses.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <div className="flex flex-col justify-between gap-6 rounded-3xl border border-slate-800 bg-slate-950/50 p-6">
+              <div className="flex items-center gap-3 text-sm text-emerald-200">
+                <Radar className="h-5 w-5" />
+                Always-on signal clarity
+              </div>
+              <p className="text-lg font-semibold text-slate-50">
+                &ldquo;EmpathIQ translates every subtle shift into intuitive visuals. Our agents finally feel supported in the moment.&rdquo;
+              </p>
+              <div className="space-y-1 text-sm text-slate-400">
+                <p>Jordan Michaels</p>
+                <p>Director of Experience Design, Aurora CX</p>
+              </div>
+            </div>
+          </section>
+        </main>
+
+        <footer className="mt-16 flex flex-col items-center gap-4 border-t border-slate-800/60 pt-8 text-center text-xs text-slate-500">
+          <p>
+            Built with care for the GPT-5 NYC Hackathon. Inspired by the potential of emotionally intelligent AI.
+          </p>
+          <div className="flex items-center gap-4 text-[0.7rem] uppercase tracking-[0.4em] text-slate-600">
+            <span>Privacy-first</span>
+            <span>Inclusive design</span>
+            <span>Realtime ready</span>
           </div>
-        </section>
-
-        {analysis ? <section className="grid gap-4 md:grid-cols-3">{breakdownCards}</section> : null}
-      </main>
-    </Theme>
-  );
-}
-
-type SignalListProps = {
-  title: string;
-  signals: Record<string, number>;
-  formatter?: Partial<Record<string, (value: number) => string>>;
-};
-
-function SignalList({ title, signals, formatter }: SignalListProps) {
-  return (
-    <div className="space-y-2">
-      <Heading as="h3" size="3" className="font-heading text-slate-700 dark:text-slate-200">
-        {title}
-      </Heading>
-      <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm text-slate-600 dark:text-slate-300">
-        {Object.entries(signals).map(([key, value]) => (
-          <div key={key} className="flex flex-col">
-            <dt className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">{key}</dt>
-            <dd className="font-medium">
-              {formatter?.[key]?.(value) ?? formatNumber(value, 2)}
-            </dd>
-          </div>
-        ))}
-      </dl>
+        </footer>
+      </div>
     </div>
   );
 }
-
-type EmotionBarProps = {
-  emotion: string;
-  value: number;
-};
-
-function EmotionBar({ emotion, value }: EmotionBarProps) {
-  const percent = clamp(value);
-  const colorClass = EMOTION_COLORS[emotion] ?? "bg-slate-400";
-  return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
-        <span>{emotion}</span>
-        <span>{formatPercent(percent)}</span>
-      </div>
-      <div className="h-2 rounded-full bg-slate-200 dark:bg-slate-800">
-        <div className={`${colorClass} h-2 rounded-full`} style={{ width: `${percent * 100}%` }} />
-      </div>
-    </div>
-  );
-}
-
-const capitalize = (value: string) => value.charAt(0).toUpperCase() + value.slice(1);

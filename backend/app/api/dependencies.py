@@ -3,8 +3,10 @@ from functools import lru_cache
 from fastapi import HTTPException
 
 from app.core.config import Settings, get_settings as _get_settings
+from app.services.auth import Auth0Client
 from app.services.emotion import EmotionAnalyzer
 from app.services.note import NoteAnnotator
+from app.services.payment import StripePaymentService
 from app.services.realtime import RealtimeSessionClient
 from app.services.storage import S3AudioStorage, StorageServiceError
 from app.services.tutor import TutorModeService
@@ -90,3 +92,48 @@ def get_tutor_service() -> TutorModeService:
     """FastAPI dependency wrapper around the tutor service singleton."""
 
     return _get_tutor_service()
+
+
+@lru_cache
+def _get_auth_client() -> Auth0Client:
+    settings = _get_settings()
+    if not settings.auth0_domain or not settings.auth0_client_id:
+        raise ValueError("Auth0 is not configured")
+
+    return Auth0Client(
+        domain=settings.auth0_domain,
+        client_id=settings.auth0_client_id,
+        client_secret=settings.auth0_client_secret,
+        audience=settings.auth0_audience,
+    )
+
+
+def get_auth_client() -> Auth0Client:
+    """Return an Auth0 client instance if the integration is configured."""
+
+    try:
+        return _get_auth_client()
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@lru_cache
+def _get_payment_service() -> StripePaymentService:
+    settings = _get_settings()
+    if not settings.stripe_secret_key:
+        raise ValueError("Stripe secret key is not configured")
+
+    return StripePaymentService(
+        api_key=settings.stripe_secret_key,
+        default_price_id=settings.stripe_default_price_id,
+        mode=settings.stripe_mode,
+    )
+
+
+def get_payment_service() -> StripePaymentService:
+    """Return a configured Stripe payment service instance."""
+
+    try:
+        return _get_payment_service()
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc

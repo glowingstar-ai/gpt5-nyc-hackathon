@@ -1,4 +1,4 @@
-"""Integration helpers for the OpenAI Realtime API."""
+"""Integration helpers for the OpenAI Realtime API via the Agent SDK."""
 
 from __future__ import annotations
 
@@ -6,7 +6,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
-import httpx
+from openai import AsyncOpenAI
+from openai._types import NOT_GIVEN
 
 
 class RealtimeSessionError(RuntimeError):
@@ -50,32 +51,41 @@ class RealtimeSessionClient:
         self.voice = voice
         self.instructions = instructions
         self.timeout = timeout
+        self._client = AsyncOpenAI(
+            api_key=self.api_key,
+            base_url=self.base_url,
+            timeout=timeout,
+        )
 
-    async def create_ephemeral_session(self) -> RealtimeSession:
+    async def create_ephemeral_session(
+        self, *, instructions: str | None = None
+    ) -> RealtimeSession:
         """Request a short-lived client token for the Realtime API."""
 
         payload: dict[str, Any] = {"model": self.model}
-        if self.voice:
-            payload["voice"] = self.voice
-        if self.instructions:
-            payload["instructions"] = self.instructions
-
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "OpenAI-Beta": "realtime=v1",
-        }
-
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.post(
-                f"{self.base_url}/realtime/sessions", headers=headers, json=payload
-            )
+        payload["voice"] = self.voice if self.voice else NOT_GIVEN
+        instructions_override = (
+            instructions if instructions is not None else self.instructions
+        )
+        payload["instructions"] = (
+            instructions_override if instructions_override is not None else NOT_GIVEN
+        )
 
         try:
-            response.raise_for_status()
-        except httpx.HTTPStatusError as exc:  # pragma: no cover - re-raise with context
-            raise RealtimeSessionError("Failed to create realtime session") from exc
+            sdk_session = await self._client.realtime.sessions.create(**payload)
+        except Exception as exc:  # pragma: no cover - network/SDK failure handled upstream
+            raise RealtimeSessionError(
+                "Failed to create realtime session via Agent SDK"
+            ) from exc
 
-        data = response.json()
+        data: dict[str, Any]
+        if hasattr(sdk_session, "model_dump"):
+            data = sdk_session.model_dump()
+        elif hasattr(sdk_session, "dict"):
+            data = sdk_session.dict()  # type: ignore[assignment]
+        else:
+            data = dict(sdk_session)  # type: ignore[arg-type]
+
         client_secret = data.get("client_secret", {}).get("value")
         if not client_secret:
             raise RealtimeSessionError("Realtime session response missing client secret")

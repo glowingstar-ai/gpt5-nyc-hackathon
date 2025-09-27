@@ -35,7 +35,10 @@ def test_realtime_session_success() -> None:
     )
 
     class FakeRealtimeClient:
-        async def create_ephemeral_session(self) -> RealtimeSession:  # noqa: D401
+        async def create_ephemeral_session(
+            self, *, instructions: str | None = None
+        ) -> RealtimeSession:  # noqa: D401
+            assert instructions is None
             return session
 
     with TestClient(app) as client:
@@ -68,7 +71,10 @@ def test_realtime_session_includes_latest_frame() -> None:
     )
 
     class FakeRealtimeClient:
-        async def create_ephemeral_session(self) -> RealtimeSession:  # noqa: D401
+        async def create_ephemeral_session(
+            self, *, instructions: str | None = None
+        ) -> RealtimeSession:  # noqa: D401
+            assert instructions is not None
             return session
 
     storage = ContextStorage()

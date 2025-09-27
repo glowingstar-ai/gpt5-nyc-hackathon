@@ -18,6 +18,10 @@ class RealtimeSessionToken(BaseModel):
     model: str = Field(description="Realtime model configured for the session")
     url: str = Field(description="Endpoint used to exchange SDP offers with OpenAI")
     voice: str | None = Field(default=None, description="Voice configured for audio output")
+    latest_frame_base64: str | None = Field(
+        default=None,
+        description="Most recent raw frame captured from the client, encoded as base64 JPEG",
+    )
 
 
 class VisionFrameRequest(BaseModel):

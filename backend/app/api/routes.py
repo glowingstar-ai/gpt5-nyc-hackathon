@@ -11,6 +11,7 @@ from pydantic import HttpUrl
 from app.api.dependencies import (
     get_auth_client,
     get_audio_storage,
+    get_context_storage,
     get_emotion_analyzer,
     get_journal_coach,
     get_note_annotator,
@@ -19,8 +20,6 @@ from app.api.dependencies import (
     get_research_service,
     get_settings,
     get_tutor_service,
-    get_vision_analyzer,
-    get_context_storage,
 )
 from app.core.config import Settings
 from app.schemas.auth import (
@@ -51,7 +50,7 @@ from app.services.realtime import RealtimeSessionClient, RealtimeSessionError
 from app.services.research import ResearchDiscoveryService
 from app.services.storage import S3AudioStorage, StorageServiceError
 from app.services.tutor import TutorModeService
-from app.services.vision import VisionAnalyzer, VisionAnalysisError
+from app.services.vision import VisionContext
 from app.services.context_storage import ContextStorage
 
 router = APIRouter()
@@ -174,14 +173,18 @@ async def create_realtime_session(
 
     # Enhance instructions with visual context if available
     enhanced_instructions = None
+    latest_frame_base64: str | None = None
     if recent_context:
-        enhanced_instructions = f"""You are an AI assistant that can see and understand the user's current screen context. 
+        latest_frame_base64 = recent_context.image_base64
+        enhanced_instructions = f"""You are an AI assistant that can see and understand the user's current screen context.
 
 Current visual context:
 - Description: {recent_context.description}
 - Key elements: {', '.join(recent_context.key_elements)}
 - User intent: {recent_context.user_intent or 'Not specified'}
 - Actionable items: {', '.join(recent_context.actionable_items)}
+
+A raw base64-encoded frame captured by the client is available for immediate multimodal processing.
 
 Use this visual context to provide more relevant and helpful responses. You can reference what you see on their screen, help them with tasks they're working on, or answer questions about the content they're viewing. Be specific about what you observe and how you can assist them with their current activity."""
 
@@ -207,16 +210,16 @@ Use this visual context to provide more relevant and helpful responses. You can 
         model=session.model,
         url=session.handshake_url,
         voice=session.voice,
+        latest_frame_base64=latest_frame_base64,
     )
 
 
 @router.post("/vision/frame", response_model=VisionFrameResponse, tags=["vision"])
 async def accept_vision_frame(
     payload: VisionFrameRequest,
-    analyzer: VisionAnalyzer = Depends(get_vision_analyzer),
     context_storage: ContextStorage = Depends(get_context_storage),
 ) -> VisionFrameResponse:
-    """Accept a base64-encoded frame from the client camera or UI surface and analyze it."""
+    """Accept a base64-encoded frame from the client camera or UI surface."""
 
     try:
         decoded = base64.b64decode(payload.image_base64, validate=True)
@@ -225,22 +228,21 @@ async def accept_vision_frame(
 
     received_at = datetime.now(timezone.utc)
 
-    # Analyze the screenshot for context
-    try:
-        context = await analyzer.analyze_screenshot(
-            image_base64=payload.image_base64,
-            source=payload.source,
-            captured_at=payload.captured_at,
-        )
-        
-        # Store context for potential use in realtime conversations
-        # Use a session ID based on timestamp for now (in production, use actual session ID)
-        session_id = f"session_{int(received_at.timestamp())}"
-        context_storage.store_context(session_id, context)
-        
-    except VisionAnalysisError as exc:
-        # Log the error but don't fail the request
-        print(f"Vision analysis failed: {exc}")
+    # Store the raw frame for potential use in realtime conversations
+    context = VisionContext(
+        description="Raw frame capture (analysis disabled)",
+        key_elements=[],
+        user_intent=None,
+        actionable_items=[],
+        timestamp=received_at,
+        source=payload.source,
+        image_base64=payload.image_base64,
+        captured_at=payload.captured_at,
+    )
+
+    # Use a session ID based on timestamp for now (in production, use actual session ID)
+    session_id = f"session_{int(received_at.timestamp())}"
+    context_storage.store_context(session_id, context)
 
     return VisionFrameResponse(
         status="accepted",

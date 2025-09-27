@@ -6,6 +6,7 @@ from app.core.config import Settings, get_settings as _get_settings
 from app.services.emotion import EmotionAnalyzer
 from app.services.note import NoteAnnotator
 from app.services.realtime import RealtimeSessionClient
+from app.services.research import ResearchDiscoveryService, ResearchServiceError
 from app.services.storage import S3AudioStorage, StorageServiceError
 from app.services.tutor import TutorModeService
 
@@ -90,3 +91,28 @@ def get_tutor_service() -> TutorModeService:
     """FastAPI dependency wrapper around the tutor service singleton."""
 
     return _get_tutor_service()
+
+
+@lru_cache
+def _get_research_service() -> ResearchDiscoveryService:
+    settings = _get_settings()
+    if not settings.openai_api_key or not settings.cohere_api_key:
+        raise ResearchServiceError("Research discovery is not configured")
+
+    return ResearchDiscoveryService(
+        api_key=settings.openai_api_key,
+        base_url=settings.openai_api_base_url,
+        model=settings.openai_research_model,
+        cohere_api_key=settings.cohere_api_key,
+        cohere_model=settings.cohere_rerank_model,
+        index_path=settings.arxiv_index_path,
+    )
+
+
+def get_research_service() -> ResearchDiscoveryService:
+    """Provide the research discovery service or raise if unavailable."""
+
+    try:
+        return _get_research_service()
+    except ResearchServiceError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc

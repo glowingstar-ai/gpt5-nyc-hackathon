@@ -9,6 +9,7 @@ import {
   MessageCircle,
   Brain,
   NotebookPen,
+  Search,
 } from "lucide-react";
 
 const featureCards = [
@@ -38,6 +39,15 @@ const featureCards = [
     icon: MessageCircle,
     accent: "from-emerald-400/80 to-teal-500/80",
     pill: "Guided Actions",
+  },
+  {
+    name: "Research Discovery",
+    description:
+      "Stream GPT-5 reasoning as it expands your query, searches ArXiv, reranks with Cohere, and justifies the picks.",
+    href: "/research-discovery",
+    icon: Search,
+    accent: "from-emerald-400/80 to-lime-500/80",
+    pill: "RAG Search",
   },
   {
     name: "Notes Workspace",

@@ -1,15 +1,20 @@
 import base64
 import binascii
+import json
+import logging
 from datetime import datetime, timezone
+from typing import AsyncIterator
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.responses import StreamingResponse
 
 from app.api.dependencies import (
     get_audio_storage,
     get_emotion_analyzer,
     get_note_annotator,
     get_realtime_client,
+    get_research_service,
     get_settings,
     get_tutor_service,
 )
@@ -22,14 +27,64 @@ from app.schemas.realtime import (
     VisionFrameResponse,
 )
 from app.schemas.note import NoteCreateRequest, NoteCreateResponse
+from app.schemas.research import ResearchQueryRequest, ResearchResultPayload
 from app.schemas.tutor import TutorModeRequest, TutorModeResponse
 from app.services.emotion import EmotionAnalyzer
 from app.services.note import NoteAnnotator, NoteAnnotationError
 from app.services.realtime import RealtimeSessionClient, RealtimeSessionError
+from app.services.research import (
+    ResearchDiscoveryService,
+    ResearchEvent,
+    ResearchResult,
+    ResearchResultsEvent,
+    ResearchServiceError,
+    ResearchStepEvent,
+)
 from app.services.storage import S3AudioStorage, StorageServiceError
 from app.services.tutor import TutorModeService
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter()
+
+
+def _event_to_sse(event: ResearchEvent) -> str:
+    if isinstance(event, ResearchStepEvent):
+        data = {
+            "type": "step",
+            "step_id": event.step_id,
+            "status": event.status,
+            "message": event.message,
+            "payload": event.payload,
+        }
+    elif isinstance(event, ResearchResultsEvent):
+        data = {
+            "type": "results",
+            "results": [
+                _serialize_result(result) for result in event.results
+            ],
+        }
+    else:  # pragma: no cover - defensive programming
+        data = {"type": "unknown"}
+    return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+def _serialize_result(result: ResearchResult) -> dict:
+    payload = ResearchResultPayload(
+        paper_id=result.paper_id,
+        title=result.title,
+        summary=result.summary,
+        url=result.url,
+        published=result.published,
+        relevance=result.relevance,
+        justification=result.justification,
+    )
+    return payload.model_dump()
+
+
+def _error_event(message: str) -> str:
+    data = {"type": "error", "message": message}
+    return f"data: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
 @router.get("/health", response_model=HealthResponse, tags=["health"])
@@ -144,3 +199,36 @@ async def create_tutor_mode_plan(
     """Create a BabyAGI-inspired tutoring plan powered by GPT-5."""
 
     return await tutor_service.generate_plan(payload)
+
+
+@router.post(
+    "/research/discover",
+    tags=["research"],
+    summary="Discover relevant ArXiv papers with a streamed RAG workflow",
+)
+async def discover_research_papers(
+    payload: ResearchQueryRequest,
+    service: ResearchDiscoveryService = Depends(get_research_service),
+) -> StreamingResponse:
+    """Stream each step of the research discovery workflow to the client."""
+
+    async def event_generator() -> AsyncIterator[str]:
+        try:
+            async for event in service.stream_search(
+                payload.query, max_results=payload.max_results
+            ):
+                yield _event_to_sse(event)
+        except ResearchServiceError as exc:
+            logger.warning("Research discovery failed: %s", exc)
+            yield _error_event(str(exc))
+            return
+        except Exception as exc:  # pragma: no cover - defensive logging
+            logger.exception("Unexpected research discovery failure")
+            yield _error_event("Research discovery encountered an unexpected error")
+            return
+
+    headers = {
+        "Cache-Control": "no-cache",
+        "X-Accel-Buffering": "no",
+    }
+    return StreamingResponse(event_generator(), media_type="text/event-stream", headers=headers)

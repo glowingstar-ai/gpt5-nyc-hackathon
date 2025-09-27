@@ -1,0 +1,37 @@
+[
+  {
+    "paper_id": "2301.00001",
+    "title": "Scaling Instruction-Following with Large Language Models",
+    "summary": "We demonstrate techniques for aligning very large language models with human instructions using reinforcement learning and preference modeling.",
+    "url": "https://arxiv.org/abs/2301.00001",
+    "published": "2023-01-01"
+  },
+  {
+    "paper_id": "2212.12345",
+    "title": "Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks",
+    "summary": "This paper introduces a retrieval-augmented generator that combines dense vector search with generative transformers to answer knowledge-intensive questions.",
+    "url": "https://arxiv.org/abs/2212.12345",
+    "published": "2022-12-19"
+  },
+  {
+    "paper_id": "2403.01234",
+    "title": "Emergent Reasoning in Multimodal Foundation Models",
+    "summary": "We analyze how multimodal large language models develop grounded reasoning capabilities when trained jointly on text and vision corpora.",
+    "url": "https://arxiv.org/abs/2403.01234",
+    "published": "2024-03-04"
+  },
+  {
+    "paper_id": "2007.09876",
+    "title": "Quantum Advantage in Noisy Intermediate-Scale Quantum Devices",
+    "summary": "We survey algorithmic primitives that demonstrate quantum advantage on near-term quantum hardware and discuss error mitigation strategies.",
+    "url": "https://arxiv.org/abs/2007.09876",
+    "published": "2020-07-20"
+  },
+  {
+    "paper_id": "2109.54321",
+    "title": "Self-Supervised Representation Learning for Scientific Literature",
+    "summary": "The authors propose a contrastive learning framework that builds document embeddings for scholarly articles using citation graphs and textual metadata.",
+    "url": "https://arxiv.org/abs/2109.54321",
+    "published": "2021-09-30"
+  }
+]

@@ -23,6 +23,14 @@ class Settings(BaseSettings):
     openai_annotation_model: str = Field(
         default="gpt-5.0", alias="OPENAI_ANNOTATION_MODEL"
     )
+    openai_research_model: str = Field(default="gpt-5.0", alias="OPENAI_RESEARCH_MODEL")
+    cohere_api_key: str | None = Field(default=None, alias="COHERE_API_KEY")
+    cohere_rerank_model: str = Field(
+        default="rerank-english-v3.0", alias="COHERE_RERANK_MODEL"
+    )
+    arxiv_index_path: str = Field(
+        default="app/data/arxiv_index.json", alias="ARXIV_INDEX_PATH"
+    )
     aws_access_key_id: str | None = Field(default=None, alias="AWS_ACCESS_KEY_ID")
     aws_secret_access_key: str | None = Field(
         default=None, alias="AWS_SECRET_ACCESS_KEY"

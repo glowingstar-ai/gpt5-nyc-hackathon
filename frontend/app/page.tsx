@@ -71,6 +71,15 @@ const featureCards = [
     accent: "from-cyan-400/80 to-blue-500/80",
     pill: "Live RAG",
   },
+  {
+    name: "Realtime Assistant",
+    description:
+      "Step into a live co-pilot that blends voice, context, and automation into a single responsive teammate.",
+    href: "/realtime-assistant",
+    icon: Star,
+    accent: "from-emerald-300/80 to-teal-400/80",
+    pill: "Live Copilot",
+  },
 ];
 
 const previewHighlights: Highlight[] = [

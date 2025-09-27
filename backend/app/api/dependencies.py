@@ -5,6 +5,7 @@ from fastapi import HTTPException
 from app.core.config import Settings, get_settings as _get_settings
 from app.services.auth import Auth0Client
 from app.services.emotion import EmotionAnalyzer
+from app.services.journal import JournalCoach
 from app.services.note import NoteAnnotator
 from app.services.payment import StripePaymentService
 from app.services.realtime import RealtimeSessionClient
@@ -71,6 +72,20 @@ def get_note_annotator() -> NoteAnnotator:
         raise HTTPException(status_code=503, detail="Annotation service is not configured")
 
     return NoteAnnotator(
+        api_key=settings.openai_api_key,
+        base_url=settings.openai_api_base_url,
+        model=settings.openai_annotation_model,
+    )
+
+
+def get_journal_coach() -> JournalCoach:
+    """Return a configured journaling coach client."""
+
+    settings = _get_settings()
+    if not settings.openai_api_key:
+        raise HTTPException(status_code=503, detail="Journaling service is not configured")
+
+    return JournalCoach(
         api_key=settings.openai_api_key,
         base_url=settings.openai_api_base_url,
         model=settings.openai_annotation_model,

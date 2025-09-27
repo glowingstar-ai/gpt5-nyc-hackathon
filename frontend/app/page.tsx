@@ -9,6 +9,7 @@ import {
   MessageCircle,
   Brain,
   NotebookPen,
+  Feather,
   Star,
   LucideIcon,
 } from "lucide-react";
@@ -71,6 +72,15 @@ const featureCards = [
     icon: NotebookPen,
     accent: "from-sky-300 via-indigo-200 to-indigo-400",
     pill: "Voice Notes",
+  },
+  {
+    name: "Evening Journal Studio",
+    description:
+      "Release the day with mood-driven prompts, breathwork cues, and affirmations from a guided journaling ritual.",
+    href: "/journal",
+    icon: Feather,
+    accent: "from-rose-400/80 to-amber-400/70",
+    pill: "Guided Ritual",
   },
   {
     name: "Research Explorer",

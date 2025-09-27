@@ -2,6 +2,7 @@
 
 from .auth import Auth0Client, Auth0ClientError, AuthTokens, AuthUserInfo
 from .emotion import EmotionAnalyzer, EmotionTaxonomy
+from .journal import JournalCoach, JournalCoachError, JournalGuidance
 from .note import AnnotationResult, NoteAnnotator, NoteAnnotationError
 from .payment import CheckoutSession, StripePaymentError, StripePaymentService
 from .research import ResearchDiscoveryService
@@ -15,6 +16,9 @@ __all__ = [
     "AuthUserInfo",
     "EmotionAnalyzer",
     "EmotionTaxonomy",
+    "JournalCoach",
+    "JournalCoachError",
+    "JournalGuidance",
     "AnnotationResult",
     "NoteAnnotator",
     "NoteAnnotationError",

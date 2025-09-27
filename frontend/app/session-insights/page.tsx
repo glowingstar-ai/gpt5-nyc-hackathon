@@ -85,7 +85,7 @@ export default function SessionInsights(): JSX.Element {
                 <li className="flex items-start gap-3">
                   <Lightbulb className="mt-1 h-4 w-4 text-emerald-300" />
                   <span>
-                    Focus on the three most critical interventions surfaced by EmpathIQ for the coming week.
+                    Focus on the three most critical interventions surfaced by GlowingStar for the coming week.
                   </span>
                 </li>
                 <li className="flex items-start gap-3">

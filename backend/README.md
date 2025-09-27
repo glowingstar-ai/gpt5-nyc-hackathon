@@ -44,6 +44,15 @@ Available settings (with defaults shown in `app/core/config.py`):
 - `OPENAI_REALTIME_MODEL` — Realtime model identifier (`gpt-4o-realtime-preview-2024-12-17`).
 - `OPENAI_REALTIME_VOICE` — Voice used for speech output (`verse`).
 - `OPENAI_REALTIME_INSTRUCTIONS` — Optional system prompt for each session.
+- `AUTH0_DOMAIN` — Auth0 tenant domain used for hosted login (no default).
+- `AUTH0_CLIENT_ID` — Client ID for the Auth0 application (no default).
+- `AUTH0_CLIENT_SECRET` — Client secret for the Auth0 application (no default).
+- `AUTH0_AUDIENCE` — Optional API audience to request during login.
+- `AUTH0_DEFAULT_REDIRECT_URI` — Default redirect URI passed to Auth0 when one is not supplied by the client.
+- `STRIPE_API_KEY` — Secret key for Stripe API access (no default).
+- `STRIPE_DEFAULT_PRICE_ID` — Optional default Price ID used for checkout sessions.
+- `STRIPE_SUCCESS_URL` — Default success redirect for Stripe Checkout sessions.
+- `STRIPE_CANCEL_URL` — Default cancel redirect for Stripe Checkout sessions.
 
 If a key is omitted it will fall back to the default defined in `Settings`.
 
@@ -97,9 +106,16 @@ backend/
 │   ├── models/
 │   │   └── __init__.py
 │   ├── schemas/
-│   │   └── health.py
+│   │   ├── auth.py
+│   │   ├── emotion.py
+│   │   ├── health.py
+│   │   ├── payments.py
+│   │   └── realtime.py
 │   ├── services/
-│   │   └── __init__.py
+│   │   ├── __init__.py
+│   │   ├── auth.py
+│   │   ├── emotion.py
+│   │   └── payments.py
 │   └── main.py
 ├── tests/
 │   └── test_health.py

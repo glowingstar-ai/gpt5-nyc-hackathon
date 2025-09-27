@@ -21,6 +21,25 @@ class Settings(BaseSettings):
         default=None, alias="OPENAI_REALTIME_INSTRUCTIONS"
     )
 
+    # Auth0 configuration
+    auth0_domain: str | None = Field(default=None, alias="AUTH0_DOMAIN")
+    auth0_client_id: str | None = Field(default=None, alias="AUTH0_CLIENT_ID")
+    auth0_client_secret: str | None = Field(
+        default=None, alias="AUTH0_CLIENT_SECRET"
+    )
+    auth0_audience: str | None = Field(default=None, alias="AUTH0_AUDIENCE")
+    auth0_default_redirect_uri: str | None = Field(
+        default=None, alias="AUTH0_DEFAULT_REDIRECT_URI"
+    )
+
+    # Stripe configuration
+    stripe_api_key: str | None = Field(default=None, alias="STRIPE_API_KEY")
+    stripe_default_price_id: str | None = Field(
+        default=None, alias="STRIPE_DEFAULT_PRICE_ID"
+    )
+    stripe_success_url: str | None = Field(default=None, alias="STRIPE_SUCCESS_URL")
+    stripe_cancel_url: str | None = Field(default=None, alias="STRIPE_CANCEL_URL")
+
     model_config = {
         "env_file": ".env",
         "case_sensitive": False,

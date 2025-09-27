@@ -1,446 +1,547 @@
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
+
+type RealtimeSessionToken = {
+  session_id?: string | null
+  client_secret: string
+  expires_at: string
+  model: string
+  url: string
+  voice?: string | null
+}
+
+type TranscriptEntry = {
+  id: string
+  role: "assistant" | "user"
+  text: string
+}
+
+const DEFAULT_API_BASE = "http://localhost:8000/api/v1"
+
+const waitForIceGathering = (pc: RTCPeerConnection): Promise<void> =>
+  new Promise((resolve) => {
+    if (pc.iceGatheringState === "complete") {
+      resolve()
+      return
+    }
+    const checkState = () => {
+      if (pc.iceGatheringState === "complete") {
+        pc.removeEventListener("icegatheringstatechange", checkState)
+        resolve()
+      }
+    }
+    pc.addEventListener("icegatheringstatechange", checkState)
+  })
+
+const normalizeDelta = (payload: Record<string, unknown>): string => {
+  const delta = payload.delta ?? payload.text ?? payload.content
+  return typeof delta === "string" ? delta : ""
+}
+
+const extractResponseId = (payload: Record<string, unknown>): string => {
+  if (typeof payload.response_id === "string") return payload.response_id
+  if (typeof payload.id === "string") return payload.id
+  const response = payload.response
+  if (response && typeof response === "object" && "id" in response) {
+    const { id } = response as { id?: unknown }
+    if (typeof id === "string") return id
+  }
+  return `resp_${Date.now()}`
+}
+
+const sanitizeBaseUrl = (value: string) => {
+  if (!value) return DEFAULT_API_BASE
+  return value.endsWith("/") ? value.slice(0, -1) : value
+}
 
 function SidePanel() {
-  const [isOverlayActive, setIsOverlayActive] = useState(false)
-  const [taskText, setTaskText] = useState("")
-  const [runId, setRunId] = useState<string | null>(null)
-  const [status, setStatus] = useState<
-    "idle" | "running" | "paused" | "stopped" | "done" | "error"
-  >("idle")
-  const [logs, setLogs] = useState<string[]>([])
-  const [baseUrl, setBaseUrl] = useState<string>("http://127.0.0.1:7788")
-  const [llmInfo, setLlmInfo] = useState<string>("LLM: OpenAI (default)")
-  const [token, setToken] = useState<string | null>(null)
-  const eventSourceRef = useRef<EventSource | null>(null)
+  const audioRef = useRef<HTMLAudioElement | null>(null)
+  const peerConnectionRef = useRef<RTCPeerConnection | null>(null)
+  const dataChannelRef = useRef<RTCDataChannel | null>(null)
+  const localStreamRef = useRef<MediaStream | null>(null)
+  const pendingResponsesRef = useRef<Map<string, string>>(new Map())
+  const isMountedRef = useRef(true)
+
+  const [apiBase, setApiBase] = useState<string>(DEFAULT_API_BASE)
+  const [status, setStatus] = useState(
+    "Idle — start a conversation to speak with GPT-5."
+  )
+  const [error, setError] = useState<string | null>(null)
+  const [isConnecting, setIsConnecting] = useState(false)
+  const [isActive, setIsActive] = useState(false)
+  const [transcript, setTranscript] = useState<TranscriptEntry[]>([])
+  const [inputValue, setInputValue] = useState("")
 
   useEffect(() => {
-    chrome.storage?.local?.get(["apiBaseUrl", "apiToken"], (res) => {
-      if (res?.apiBaseUrl) setBaseUrl(res.apiBaseUrl)
-      if (res?.apiToken) setToken(res.apiToken)
+    chrome.storage?.local?.get(["apiBaseUrl"], (res) => {
+      if (typeof res?.apiBaseUrl === "string" && res.apiBaseUrl.length > 0) {
+        setApiBase(sanitizeBaseUrl(res.apiBaseUrl))
+      }
     })
   }, [])
 
-  const saveConfig = (nextBaseUrl: string, nextToken: string | null) => {
-    chrome.storage?.local?.set({
-      apiBaseUrl: nextBaseUrl,
-      apiToken: nextToken || ""
+  useEffect(() => {
+    isMountedRef.current = true
+    return () => {
+      isMountedRef.current = false
+      resetConnection()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const persistBase = useCallback((value: string) => {
+    const sanitized = sanitizeBaseUrl(value)
+    setApiBase(sanitized)
+    chrome.storage?.local?.set({ apiBaseUrl: sanitized })
+  }, [])
+
+  const resetConnection = useCallback((message?: string) => {
+    dataChannelRef.current?.close()
+    dataChannelRef.current = null
+
+    const pc = peerConnectionRef.current
+    peerConnectionRef.current = null
+    if (pc) {
+      pc.onicecandidate = null
+      pc.ontrack = null
+      pc.onconnectionstatechange = null
+      pc.close()
+    }
+
+    const localStream = localStreamRef.current
+    localStreamRef.current = null
+    localStream?.getTracks().forEach((track) => track.stop())
+
+    if (audioRef.current) {
+      audioRef.current.srcObject = null
+    }
+
+    pendingResponsesRef.current.clear()
+    setIsConnecting(false)
+    setIsActive(false)
+    if (message) {
+      setStatus(message)
+    } else {
+      setStatus("Call ended. Start a new conversation when ready.")
+    }
+  }, [])
+
+  const appendAssistantDelta = useCallback((responseId: string, delta: string) => {
+    if (!delta) return
+    const updated = (pendingResponsesRef.current.get(responseId) ?? "") + delta
+    pendingResponsesRef.current.set(responseId, updated)
+    setTranscript((prev) => {
+      const index = prev.findIndex((entry) => entry.id === responseId)
+      if (index >= 0) {
+        const clone = [...prev]
+        clone[index] = { ...clone[index], text: updated }
+        return clone
+      }
+      return [...prev, { id: responseId, role: "assistant", text: updated }]
     })
-  }
+  }, [])
 
-  const appendLog = (line: string) => setLogs((prev) => [...prev, line])
-
-  const closeStream = () => {
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close()
-      eventSourceRef.current = null
-    }
-  }
-
-  const openStream = (rid: string) => {
-    try {
-      closeStream()
-      const url = `${baseUrl}/api/agent/stream?runId=${encodeURIComponent(rid)}`
-      const es = new EventSource(url, { withCredentials: false })
-      eventSourceRef.current = es
-      es.onmessage = (ev) => {
-        if (!ev?.data) return
-        try {
-          const payload = JSON.parse(ev.data)
-          if (payload?.type === "chat" && payload?.message) {
-            const role = payload.message.role || "assistant"
-            const content = payload.message.content || ""
-            // Render markdown-lite: strip tags from WebUI JSON block wrapper if present
-            const text =
-              typeof content === "string" ? content : JSON.stringify(content)
-            appendLog(`${role}: ${text}`)
-          } else if (payload?.type === "log") {
-            appendLog(String(payload.message))
-          } else {
-            appendLog(ev.data)
-          }
-        } catch {
-          appendLog(ev.data)
-        }
-      }
-      es.addEventListener("status", (ev: MessageEvent) => {
-        try {
-          const data = JSON.parse(ev.data)
-          if (data?.state) setStatus(data.state)
-        } catch {}
-      })
-      es.onerror = () => {
-        appendLog("[stream] error or disconnected")
-      }
-    } catch (e) {
-      appendLog(`[stream] failed: ${String(e)}`)
-    }
-  }
-
-  const callApi = async (path: string, body?: unknown) => {
-    const headers: Record<string, string> = {
-      "Content-Type": "application/json"
-    }
-    if (token) headers["Authorization"] = `Bearer ${token}`
-    const res = await fetch(`${baseUrl}${path}`, {
-      method: "POST",
-      headers,
-      body: body ? JSON.stringify(body) : undefined
-    })
-    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
-    return (await res.json()) as any
-  }
-
-  const handleTakeOver = async () => {
-    try {
-      // Get the current active tab
-      const [tab] = await chrome.tabs.query({
-        active: true,
-        currentWindow: true
-      })
-      if (tab?.id) {
-        console.log("Sending SHOW_OVERLAY message to tab:", tab.id)
-        // Send message to content script to show overlay
-        const response = await chrome.tabs.sendMessage(tab.id, {
-          type: "SHOW_OVERLAY"
-        })
-        console.log("Response from content script:", response)
-        setIsOverlayActive(true)
-      } else {
-        console.warn("No active tab found")
-      }
-    } catch (error) {
-      console.error("Error sending message to content script:", error)
-      // Try to reload the page to inject the content script
+  const handleServerMessage = useCallback(
+    (event: MessageEvent<string>) => {
       try {
-        const [tab] = await chrome.tabs.query({
-          active: true,
-          currentWindow: true
-        })
-        if (tab?.id) {
-          await chrome.tabs.reload(tab.id)
-          // Wait a bit and try again
-          setTimeout(async () => {
-            try {
-              await chrome.tabs.sendMessage(tab.id, { type: "SHOW_OVERLAY" })
-              setIsOverlayActive(true)
-            } catch (retryError) {
-              console.error("Retry failed:", retryError)
-            }
-          }, 1000)
+        const payload = JSON.parse(event.data) as Record<string, unknown>
+        const type = typeof payload.type === "string" ? payload.type : ""
+
+        if (
+          type === "response.output_text.delta" ||
+          type === "response.output_audio_transcript.delta"
+        ) {
+          appendAssistantDelta(
+            extractResponseId(payload),
+            normalizeDelta(payload)
+          )
+          return
         }
-      } catch (reloadError) {
-        console.error("Failed to reload tab:", reloadError)
-      }
-    }
-  }
 
-  const handleReclaimControl = async () => {
+        if (type === "response.done") {
+          const responseId = extractResponseId(payload)
+          const existing = pendingResponsesRef.current.get(responseId)
+          if (existing) {
+            pendingResponsesRef.current.set(responseId, existing.trim())
+            setTranscript((prev) => {
+              const index = prev.findIndex((entry) => entry.id === responseId)
+              if (index === -1) return prev
+              const clone = [...prev]
+              clone[index] = { ...clone[index], text: existing.trim() }
+              return clone
+            })
+          }
+          return
+        }
+
+        if (type === "conversation.item.created") {
+          const item = payload.item
+          if (item && typeof item === "object") {
+            const { role, content, id } = item as {
+              role?: unknown
+              content?: unknown
+              id?: unknown
+            }
+            if (role === "user" && Array.isArray(content)) {
+              const textPart = content.find((part) => {
+                return (
+                  part &&
+                  typeof part === "object" &&
+                  (part as { type?: string }).type === "input_text"
+                )
+              }) as { text?: unknown } | undefined
+
+              if (typeof textPart?.text === "string") {
+                const entryId = typeof id === "string" ? id : `user_${Date.now()}`
+                setTranscript((prev) => [
+                  ...prev,
+                  { id: entryId, role: "user", text: textPart.text }
+                ])
+              }
+            }
+          }
+        }
+      } catch (err) {
+        console.warn("Failed to parse realtime event", err)
+      }
+    },
+    [appendAssistantDelta]
+  )
+
+  const startConversation = useCallback(async () => {
+    if (isConnecting || isActive) {
+      return
+    }
+
+    setIsConnecting(true)
+    setError(null)
+    setStatus("Requesting realtime session…")
+    setTranscript([])
+    pendingResponsesRef.current.clear()
+
     try {
-      // Get the current active tab
-      const [tab] = await chrome.tabs.query({
-        active: true,
-        currentWindow: true
+      const response = await fetch(
+        `${sanitizeBaseUrl(apiBase)}/realtime/session`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" }
+        }
+      )
+
+      if (!response.ok) {
+        throw new Error(`Failed to create realtime session (${response.status})`)
+      }
+
+      const token = (await response.json()) as RealtimeSessionToken
+      if (!token.client_secret || !token.url) {
+        throw new Error("Realtime session response is missing required fields.")
+      }
+
+      const pc = new RTCPeerConnection()
+      peerConnectionRef.current = pc
+
+      pc.ontrack = (event) => {
+        const [remoteStream] = event.streams
+        if (audioRef.current && remoteStream) {
+          audioRef.current.srcObject = remoteStream
+        }
+      }
+
+      pc.onconnectionstatechange = () => {
+        if (!isMountedRef.current) {
+          return
+        }
+
+        if (pc.connectionState === "connected") {
+          setStatus("Connected — start chatting with the assistant.")
+        }
+
+        if (
+          pc.connectionState === "failed" ||
+          pc.connectionState === "disconnected" ||
+          pc.connectionState === "closed"
+        ) {
+          resetConnection("Connection lost. Start again to reconnect.")
+        }
+      }
+
+      const dataChannel = pc.createDataChannel("oai-events")
+      dataChannelRef.current = dataChannel
+      dataChannel.addEventListener("message", handleServerMessage)
+      dataChannel.addEventListener("open", () => {
+        if (!isMountedRef.current) {
+          return
+        }
+        setIsActive(true)
+        setIsConnecting(false)
+        setStatus("Assistant joined — speak or send text prompts.")
+        dataChannel.send(JSON.stringify({ type: "response.create" }))
       })
-      if (tab?.id) {
-        console.log("Sending HIDE_OVERLAY message to tab:", tab.id)
-        // Send message to content script to hide overlay
-        const response = await chrome.tabs.sendMessage(tab.id, {
-          type: "HIDE_OVERLAY"
-        })
-        console.log("Response from content script:", response)
-        setIsOverlayActive(false)
-      } else {
-        console.warn("No active tab found")
+      dataChannel.addEventListener("close", () => {
+        if (isMountedRef.current) {
+          resetConnection()
+        }
+      })
+
+      const localStream = await navigator.mediaDevices.getUserMedia({
+        audio: true
+      })
+      localStreamRef.current = localStream
+      localStream.getTracks().forEach((track) => {
+        pc.addTrack(track, localStream)
+      })
+
+      await pc.setLocalDescription(await pc.createOffer())
+      await waitForIceGathering(pc)
+
+      const sdpResponse = await fetch(token.url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token.client_secret}`,
+          "Content-Type": "application/sdp",
+          "OpenAI-Beta": "realtime=v1"
+        },
+        body: pc.localDescription?.sdp ?? ""
+      })
+
+      if (!sdpResponse.ok) {
+        throw new Error(`Realtime handshake failed (${sdpResponse.status})`)
       }
-    } catch (error) {
-      console.error("Error sending message to content script:", error)
-      // Still set the state to false even if message fails
-      setIsOverlayActive(false)
-    }
-  }
 
-  const handleSubmitTask = async () => {
-    try {
-      setStatus("running")
-      appendLog(`Submitting task...`)
-      const resp = await callApi("/api/agent/start", { task: taskText })
-      const rid = resp?.runId as string
-      setRunId(rid)
-      appendLog(`Run started: ${rid}`)
-      openStream(rid)
-    } catch (e) {
-      setStatus("error")
-      appendLog(`[start] ${String(e)}`)
+      const answer = await sdpResponse.text()
+      await pc.setRemoteDescription({ type: "answer", sdp: answer })
+      setStatus("Awaiting assistant audio…")
+    } catch (err) {
+      console.error("Unable to start realtime conversation", err)
+      if (err instanceof Error) {
+        setError(err.message)
+        resetConnection("Unable to establish realtime session.")
+      } else {
+        setError("Unknown error while connecting to realtime session.")
+        resetConnection()
+      }
     }
-  }
+  }, [apiBase, handleServerMessage, isActive, isConnecting, resetConnection])
 
-  const handlePause = async () => {
-    if (!runId) return
-    try {
-      await callApi("/api/agent/pause", { runId })
-      setStatus("paused")
-      appendLog("Paused")
-    } catch (e) {
-      appendLog(`[pause] ${String(e)}`)
+  const stopConversation = useCallback(() => {
+    if (!isConnecting && !isActive) {
+      return
     }
-  }
+    resetConnection()
+  }, [isActive, isConnecting, resetConnection])
 
-  const handleResume = async () => {
-    if (!runId) return
-    try {
-      await callApi("/api/agent/resume", { runId })
-      setStatus("running")
-      appendLog("Resumed")
-    } catch (e) {
-      appendLog(`[resume] ${String(e)}`)
+  const sendTextMessage = useCallback(() => {
+    const channel = dataChannelRef.current
+    const text = inputValue.trim()
+    if (!channel || !text || channel.readyState !== "open") {
+      return
     }
-  }
 
-  const handleStop = async () => {
-    if (!runId) return
-    try {
-      await callApi("/api/agent/stop", { runId })
-      setStatus("stopped")
-      appendLog("Stopped")
-      closeStream()
-    } catch (e) {
-      appendLog(`[stop] ${String(e)}`)
-    }
-  }
-
-  const handleClear = () => {
-    setTaskText("")
-    setLogs([])
-    setRunId(null)
-    setStatus("idle")
-    closeStream()
-  }
+    const entryId = `user_${Date.now()}`
+    setTranscript((prev) => [...prev, { id: entryId, role: "user", text }])
+    channel.send(
+      JSON.stringify({
+        type: "conversation.item.create",
+        item: {
+          type: "message",
+          role: "user",
+          content: [{ type: "input_text", text }]
+        }
+      })
+    )
+    channel.send(JSON.stringify({ type: "response.create" }))
+    setInputValue("")
+  }, [inputValue])
 
   return (
     <div
       style={{
-        padding: "20px",
+        fontFamily:
+          "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
+        minHeight: "100vh",
+        background: "#0f172a",
+        color: "#f8fafc",
         display: "flex",
         flexDirection: "column",
-        gap: "12px",
-        minHeight: "100vh"
+        padding: "20px",
+        gap: "16px"
       }}>
-      {!isOverlayActive ? (
-        <button
-          onClick={handleTakeOver}
+      <header>
+        <h1
           style={{
-            background: "#007aff",
-            border: "none",
-            borderRadius: "8px",
-            padding: "12px 20px",
-            color: "#ffffff",
-            fontSize: "15px",
-            fontWeight: "500",
-            cursor: "pointer",
-            transition: "all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)",
-            boxShadow: "0 2px 8px rgba(0, 122, 255, 0.3)"
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = "#0056b3"
-            e.currentTarget.style.transform = "translateY(-1px)"
-            e.currentTarget.style.boxShadow =
-              "0 4px 12px rgba(0, 122, 255, 0.4)"
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = "#007aff"
-            e.currentTarget.style.transform = "translateY(0)"
-            e.currentTarget.style.boxShadow = "0 2px 8px rgba(0, 122, 255, 0.3)"
+            fontSize: "20px",
+            fontWeight: 600,
+            margin: 0,
+            marginBottom: "4px"
           }}>
-          Take Over Screen
-        </button>
-      ) : (
-        <button
-          onClick={handleReclaimControl}
-          style={{
-            background: "#ff3b30",
-            border: "none",
-            borderRadius: "8px",
-            padding: "12px 20px",
-            color: "#ffffff",
-            fontSize: "15px",
-            fontWeight: "500",
-            cursor: "pointer",
-            transition: "all 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94)",
-            boxShadow: "0 2px 8px rgba(255, 59, 48, 0.3)"
-          }}
-          onMouseEnter={(e) => {
-            e.currentTarget.style.background = "#d70015"
-            e.currentTarget.style.transform = "translateY(-1px)"
-            e.currentTarget.style.boxShadow =
-              "0 4px 12px rgba(255, 59, 48, 0.4)"
-          }}
-          onMouseLeave={(e) => {
-            e.currentTarget.style.background = "#ff3b30"
-            e.currentTarget.style.transform = "translateY(0)"
-            e.currentTarget.style.boxShadow = "0 2px 8px rgba(255, 59, 48, 0.3)"
-          }}>
-          Reclaim Control
-        </button>
-      )}
-      <div style={{ width: "100%", maxWidth: 720 }}>
-        <div style={{ marginBottom: 8, color: "#9aa0a6", fontSize: 13 }}>
-          Describe the task for the agent
+          GPT-5 Realtime Companion
+        </h1>
+        <p style={{ margin: 0, color: "#cbd5f5", fontSize: "14px" }}>
+          Start a live voice conversation with the assistant.
+        </p>
+      </header>
+
+      <section
+        style={{
+          background: "rgba(15,23,42,0.6)",
+          border: "1px solid rgba(148,163,184,0.3)",
+          borderRadius: "12px",
+          padding: "16px",
+          display: "flex",
+          flexDirection: "column",
+          gap: "12px"
+        }}>
+        <div style={{ fontSize: "14px", lineHeight: 1.5 }}>{status}</div>
+        {error ? (
+          <div style={{ color: "#fca5a5", fontSize: "13px" }}>{error}</div>
+        ) : null}
+
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          <button
+            onClick={startConversation}
+            disabled={isConnecting || isActive}
+            style={{
+              background: isActive
+                ? "rgba(16,185,129,0.35)"
+                : "rgba(59,130,246,0.85)",
+              border: "none",
+              color: "white",
+              padding: "10px 16px",
+              borderRadius: "10px",
+              cursor: isConnecting || isActive ? "not-allowed" : "pointer",
+              fontWeight: 600,
+              fontSize: "14px"
+            }}>
+            {isConnecting ? "Connecting…" : isActive ? "Connected" : "Start"}
+          </button>
+          <button
+            onClick={stopConversation}
+            disabled={!isConnecting && !isActive}
+            style={{
+              background: "rgba(248,113,113,0.85)",
+              border: "none",
+              color: "white",
+              padding: "10px 16px",
+              borderRadius: "10px",
+              cursor:
+                !isConnecting && !isActive ? "not-allowed" : "pointer",
+              fontWeight: 600,
+              fontSize: "14px"
+            }}>
+            Hang up
+          </button>
         </div>
-        <textarea
-          value={taskText}
-          onChange={(e) => setTaskText(e.target.value)}
-          placeholder="Enter your task here or provide assistance when asked."
-          rows={4}
+
+        <div
           style={{
-            width: "100%",
-            background: "#1e1f24",
-            color: "#e8eaed",
-            border: "1px solid #3c4043",
-            borderRadius: 8,
-            padding: 10,
-            resize: "vertical"
+            background: "rgba(15,23,42,0.7)",
+            border: "1px solid rgba(148,163,184,0.25)",
+            borderRadius: "10px",
+            padding: "12px",
+            maxHeight: "220px",
+            overflowY: "auto"
+          }}>
+          {transcript.length === 0 ? (
+            <p style={{ margin: 0, color: "#cbd5f5", fontSize: "13px" }}>
+              Assistant and user transcripts will appear here.
+            </p>
+          ) : (
+            <ul style={{ listStyle: "none", margin: 0, padding: 0, gap: "8px" }}>
+              {transcript.map((entry) => (
+                <li key={entry.id} style={{ marginBottom: "10px" }}>
+                  <span
+                    style={{
+                      display: "block",
+                      textTransform: "uppercase",
+                      fontSize: "11px",
+                      letterSpacing: "0.08em",
+                      color: "#94a3b8"
+                    }}>
+                    {entry.role}
+                  </span>
+                  <span style={{ fontSize: "14px", color: "#f8fafc" }}>
+                    {entry.text}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <form
+          onSubmit={(event) => {
+            event.preventDefault()
+            sendTextMessage()
+          }}
+          style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          <input
+            type="text"
+            value={inputValue}
+            onChange={(event) => setInputValue(event.target.value)}
+            placeholder={
+              isActive
+                ? "Send a text prompt to the assistant"
+                : "Connect to send a prompt"
+            }
+            disabled={!isActive}
+            style={{
+              flex: "1 1 160px",
+              minWidth: "0",
+              borderRadius: "10px",
+              border: "1px solid rgba(148,163,184,0.4)",
+              background: "rgba(30,41,59,0.7)",
+              color: "#f8fafc",
+              padding: "10px 12px",
+              fontSize: "14px"
+            }}
+          />
+          <button
+            type="submit"
+            disabled={!isActive || !inputValue.trim()}
+            style={{
+              background: "rgba(148,163,184,0.35)",
+              border: "none",
+              color: "white",
+              padding: "10px 16px",
+              borderRadius: "10px",
+              cursor: !isActive || !inputValue.trim() ? "not-allowed" : "pointer",
+              fontWeight: 600,
+              fontSize: "14px"
+            }}>
+            Send
+          </button>
+        </form>
+      </section>
+
+      <section
+        style={{
+          marginTop: "auto",
+          display: "flex",
+          flexDirection: "column",
+          gap: "8px"
+        }}>
+        <label
+          htmlFor="api-base-input"
+          style={{ fontSize: "12px", color: "#94a3b8", fontWeight: 600 }}>
+          API base URL
+        </label>
+        <input
+          id="api-base-input"
+          type="text"
+          value={apiBase}
+          onChange={(event) => persistBase(event.target.value)}
+          placeholder="http://localhost:8000/api/v1"
+          style={{
+            borderRadius: "10px",
+            border: "1px solid rgba(148,163,184,0.4)",
+            background: "rgba(15,23,42,0.7)",
+            color: "#f8fafc",
+            padding: "10px 12px",
+            fontSize: "13px"
           }}
         />
-        <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
-          <button
-            onClick={handleStop}
-            disabled={!runId || status === "idle"}
-            style={{
-              background: "#8f1d1d",
-              border: "none",
-              borderRadius: 8,
-              padding: "10px 14px",
-              color: "#fff",
-              cursor: runId ? "pointer" : "not-allowed"
-            }}>
-            Stop
-          </button>
-          {status === "paused" ? (
-            <button
-              onClick={handleResume}
-              disabled={!runId}
-              style={{
-                background: "#2d5f2e",
-                border: "none",
-                borderRadius: 8,
-                padding: "10px 14px",
-                color: "#fff",
-                cursor: runId ? "pointer" : "not-allowed"
-              }}>
-              Resume
-            </button>
-          ) : (
-            <button
-              onClick={handlePause}
-              disabled={!runId || status !== "running"}
-              style={{
-                background: "#2d3a59",
-                border: "none",
-                borderRadius: 8,
-                padding: "10px 14px",
-                color: "#fff",
-                cursor:
-                  runId && status === "running" ? "pointer" : "not-allowed"
-              }}>
-              Pause
-            </button>
-          )}
-          <button
-            onClick={handleClear}
-            style={{
-              background: "#3c4043",
-              border: "none",
-              borderRadius: 8,
-              padding: "10px 14px",
-              color: "#e8eaed",
-              cursor: "pointer"
-            }}>
-            Clear
-          </button>
-          <button
-            onClick={handleSubmitTask}
-            disabled={!taskText || status === "running"}
-            style={{
-              background: "#0b57d0",
-              border: "none",
-              borderRadius: 8,
-              padding: "10px 16px",
-              color: "#fff",
-              marginLeft: "auto",
-              cursor:
-                taskText && status !== "running" ? "pointer" : "not-allowed"
-            }}>
-            Submit Task
-          </button>
-        </div>
-        <div style={{ marginTop: 10, fontSize: 12, color: "#9aa0a6" }}>
-          Status: {status} · {llmInfo}
-        </div>
-        <div
-          style={{
-            marginTop: 8,
-            background: "#0f1115",
-            border: "1px solid #3c4043",
-            borderRadius: 8,
-            padding: 10,
-            height: 220,
-            overflow: "auto",
-            fontFamily:
-              "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
-            fontSize: 12,
-            color: "#e8eaed"
-          }}>
-          {logs.length === 0 ? (
-            <div style={{ opacity: 0.7 }}>Task outputs will appear here…</div>
-          ) : (
-            logs.map((l, i) => <div key={i}>{l}</div>)
-          )}
-        </div>
-        <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-          <input
-            value={baseUrl}
-            onChange={(e) => {
-              setBaseUrl(e.target.value)
-              saveConfig(e.target.value, token)
-            }}
-            placeholder="API Base URL"
-            style={{
-              flex: 1,
-              background: "#1e1f24",
-              color: "#e8eaed",
-              border: "1px solid #3c4043",
-              borderRadius: 8,
-              padding: "8px 10px"
-            }}
-          />
-          <input
-            value={token || ""}
-            onChange={(e) => {
-              const next = e.target.value
-              setToken(next)
-              saveConfig(baseUrl, next)
-            }}
-            placeholder="Bearer Token (optional)"
-            style={{
-              flex: 1,
-              background: "#1e1f24",
-              color: "#e8eaed",
-              border: "1px solid #3c4043",
-              borderRadius: 8,
-              padding: "8px 10px"
-            }}
-          />
-        </div>
-        <div
-          style={{
-            marginTop: 6,
-            fontSize: 11,
-            color: "#6b7280",
-            textAlign: "right"
-          }}>
-          V0.0.1
-        </div>
-      </div>
+      </section>
+
+      <audio ref={audioRef} autoPlay style={{ display: "none" }} />
     </div>
   )
 }

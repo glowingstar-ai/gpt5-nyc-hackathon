@@ -1,8 +1,8 @@
 {
-  "name": "frosted-overlay",
-  "displayName": "Frosted Takeover Overlay",
+  "name": "gpt5-realtime-companion",
+  "displayName": "GPT-5 Realtime Companion",
   "version": "0.0.1",
-  "description": "Smooth blur + message overlay with reclaim control.",
+  "description": "Side panel to start a realtime GPT-5 conversation using OpenAI's WebRTC API.",
   "author": "chenyu zhang",
   "scripts": {
     "dev": "plasmo dev",
@@ -24,8 +24,8 @@
     "typescript": "5.3.3"
   },
   "manifest": {
-    "name": "Frosted Takeover Overlay",
-    "description": "Smooth blur + message overlay with reclaim control.",
+    "name": "GPT-5 Realtime Companion",
+    "description": "Start a realtime GPT-5 conversation from the Chrome side panel.",
     "version": "0.0.1",
     "action": {
       "default_title": "Open side panel"

@@ -72,6 +72,15 @@ const featureCards = [
     accent: "from-sky-300 via-indigo-200 to-indigo-400",
     pill: "Voice Notes",
   },
+  {
+    name: "Research Explorer",
+    description:
+      "Describe the paper you need and watch GPT-5 orchestrate an arXiv deep dive in real time.",
+    href: "/research-explorer",
+    icon: Sparkles,
+    accent: "from-cyan-400/80 to-blue-500/80",
+    pill: "Live RAG",
+  },
 ];
 
 const previewHighlights: Highlight[] = [

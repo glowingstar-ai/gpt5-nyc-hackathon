@@ -9,6 +9,7 @@ import {
   NotebookPen,
   Feather,
   Star,
+  GraduationCap,
   LucideIcon,
 } from "lucide-react";
 
@@ -61,6 +62,15 @@ const featureCards = [
     icon: Feather,
     accent: "from-rose-400/80 to-amber-400/70",
     pill: "Guided Ritual",
+  },
+  {
+    name: "Tutor Mode Studio",
+    description:
+      "Design an adaptive teaching blueprint tailored to your learner's goals, modalities, and context.",
+    href: "/tutor-mode",
+    icon: GraduationCap,
+    accent: "from-violet-300/80 to-fuchsia-400/80",
+    pill: "Tutor Plans",
   },
   {
     name: "Research Explorer",

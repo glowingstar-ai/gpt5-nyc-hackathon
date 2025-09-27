@@ -37,28 +37,36 @@ type VideoSnapshot = {
   engagement: number;
 };
 
-type FaceLandmarksDetector = {
-  estimateFaces: (
-    input: HTMLVideoElement,
-    config?: { flipHorizontal?: boolean }
-  ) => Promise<Array<{ keypoints: Array<{ x: number; y: number }> }>>;
-  close: () => Promise<void>;
+type FaceLandmarkPoint = { x: number; y: number; z?: number };
+
+type FaceLandmarkerResult = {
+  faceLandmarks: Array<Array<FaceLandmarkPoint>>;
 };
 
-type FaceLandmarksModule = {
-  createDetector: (
-    model: unknown,
-    config: {
-      runtime: "mediapipe";
-      refineLandmarks?: boolean;
-      solutionPath?: string;
-    }
-  ) => Promise<FaceLandmarksDetector>;
-  SupportedModels: { MediaPipeFaceMesh: unknown };
+type FaceLandmarker = {
+  detectForVideo: (
+    video: HTMLVideoElement,
+    timestampMs: number
+  ) => FaceLandmarkerResult | undefined;
+  close: () => void;
 };
 
-type MediapipeModule = {
-  VERSION?: string;
+type VisionFileset = unknown;
+
+type TasksVisionModule = {
+  FaceLandmarker: {
+    createFromOptions: (
+      filesetResolver: VisionFileset,
+      options: {
+        baseOptions: { modelAssetPath: string };
+        runningMode: "IMAGE" | "VIDEO";
+        numFaces?: number;
+      }
+    ) => Promise<FaceLandmarker>;
+  };
+  FilesetResolver: {
+    forVisionTasks: (wasmPath: string) => Promise<VisionFileset>;
+  };
 };
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
@@ -86,6 +94,10 @@ const EMOTION_COLORS: Record<string, string> = {
   anticipation: "bg-orange-400",
   neutral: "bg-slate-400"
 };
+
+const MEDIAPIPE_WASM_BASE = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.4/wasm";
+const MEDIAPIPE_FACE_MODEL_URL =
+  "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/latest/face_landmarker.task";
 
 const clamp = (value: number, min = 0, max = 1) => Math.min(Math.max(value, min), max);
 
@@ -137,7 +149,7 @@ export default function EmotionConsole(): JSX.Element {
   const audioRafRef = useRef<number>();
   const videoRafRef = useRef<number>();
   const pollIntervalRef = useRef<number>();
-  const detectorRef = useRef<FaceLandmarksDetector | null>(null);
+  const detectorRef = useRef<FaceLandmarker | null>(null);
   const voiceFeaturesRef = useRef({
     energy: 0,
     pitch: 0,
@@ -187,7 +199,11 @@ export default function EmotionConsole(): JSX.Element {
     videoRafRef.current = undefined;
 
     if (detectorRef.current) {
-      await detectorRef.current.close();
+      try {
+        detectorRef.current.close();
+      } catch (err) {
+        console.error("Failed to release face landmarker", err);
+      }
       detectorRef.current = null;
     }
 
@@ -283,15 +299,26 @@ export default function EmotionConsole(): JSX.Element {
     }
 
     try {
-      const faces = await detectorRef.current.estimateFaces(video, {
-        flipHorizontal: true
-      });
+      const detector = detectorRef.current;
+      if (!detector) {
+        return;
+      }
 
-      if (faces.length > 0) {
-        const face = faces[0];
-        const keypoints = face.keypoints;
+      const result = detector.detectForVideo(video, performance.now());
+      const landmarks = result?.faceLandmarks?.[0];
 
-        const getPoint = (index: number) => keypoints[index];
+      if (landmarks && landmarks.length > 0) {
+        const width = video.videoWidth || video.clientWidth || 0;
+        const height = video.videoHeight || video.clientHeight || 0;
+
+        const getPoint = (index: number) => {
+          const point = landmarks[index];
+          return {
+            x: point.x * width,
+            y: point.y * height
+          };
+        };
+
         const distance = (aIndex: number, bIndex: number) => {
           const a = getPoint(aIndex);
           const b = getPoint(bIndex);
@@ -302,7 +329,6 @@ export default function EmotionConsole(): JSX.Element {
 
         const faceWidth = distance(33, 263);
         const mouthWidth = distance(61, 291);
-        const mouthHeight = distance(13, 14);
         const smile = clamp((mouthWidth / Math.max(faceWidth, 1e-3) - 0.32) * 5);
         const eyeLeft = distance(159, 145);
         const eyeRight = distance(386, 374);
@@ -314,7 +340,10 @@ export default function EmotionConsole(): JSX.Element {
         const nose = getPoint(1);
         const lastNoseX = videoFeaturesRef.current.lastNoseX;
         const lastNoseY = videoFeaturesRef.current.lastNoseY;
-        const movement = Math.sqrt((nose.x - lastNoseX) ** 2 + (nose.y - lastNoseY) ** 2);
+        const movement =
+          lastNoseX === 0 && lastNoseY === 0
+            ? 0
+            : Math.sqrt((nose.x - lastNoseX) ** 2 + (nose.y - lastNoseY) ** 2);
         const headMovement = clamp(movement * 60);
 
         const engagement = clamp((smile + browRaise + eyeOpenness + headMovement) / 4);
@@ -350,16 +379,18 @@ export default function EmotionConsole(): JSX.Element {
       return detectorRef.current;
     }
 
-    const [faceModule, faceMeshModule] = await Promise.all([
-      import("@tensorflow-models/face-landmarks-detection") as Promise<FaceLandmarksModule>,
-      import("@mediapipe/face_mesh") as Promise<MediapipeModule>
+    const [{ FaceLandmarker, FilesetResolver }] = await Promise.all([
+      import("@mediapipe/tasks-vision") as Promise<TasksVisionModule>
     ]);
 
-    const version = faceMeshModule.VERSION ?? "0.4.1633559617";
-    const detector = await faceModule.createDetector(faceModule.SupportedModels.MediaPipeFaceMesh, {
-      runtime: "mediapipe",
-      refineLandmarks: true,
-      solutionPath: `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh@${version}`
+    const filesetResolver = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_BASE);
+
+    const detector = await FaceLandmarker.createFromOptions(filesetResolver, {
+      baseOptions: {
+        modelAssetPath: MEDIAPIPE_FACE_MODEL_URL
+      },
+      runningMode: "VIDEO",
+      numFaces: 1
     });
 
     detectorRef.current = detector;

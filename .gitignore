@@ -24,7 +24,7 @@ lerna-debug.log*
 __pycache__/
 *.py[cod]
 *.egg-info/
-.env
+**/.env
 .venv/
 
 # Coverage

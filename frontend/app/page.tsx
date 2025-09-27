@@ -770,7 +770,7 @@ export default function EmotionConsole(): JSX.Element {
               </div>
             )}
 
-            <RealtimeConversationPanel />
+            <RealtimeConversationPanel onShareVisionFrame={captureAndSendFrame} />
           </div>
         </section>
 

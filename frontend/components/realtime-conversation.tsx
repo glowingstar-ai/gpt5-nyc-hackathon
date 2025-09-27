@@ -5,7 +5,8 @@ import { Heading, Text } from "@radix-ui/themes";
 
 import { Button } from "@/components/ui/button";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
 type RealtimeSessionToken = {
   session_id?: string | null;
@@ -56,7 +57,13 @@ const extractResponseId = (payload: Record<string, unknown>): string => {
   return `resp_${Date.now()}`;
 };
 
-export function RealtimeConversationPanel(): JSX.Element {
+type RealtimeConversationPanelProps = {
+  onShareVisionFrame?: () => Promise<void>;
+};
+
+export function RealtimeConversationPanel({
+  onShareVisionFrame,
+}: RealtimeConversationPanelProps): JSX.Element {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const dataChannelRef = useRef<RTCDataChannel | null>(null);
@@ -104,28 +111,38 @@ export function RealtimeConversationPanel(): JSX.Element {
     }
   }, []);
 
-  const appendAssistantDelta = useCallback((responseId: string, delta: string) => {
-    if (!delta) return;
-    const updated = (pendingResponsesRef.current.get(responseId) ?? "") + delta;
-    pendingResponsesRef.current.set(responseId, updated);
-    setTranscript((prev) => {
-      const index = prev.findIndex((entry) => entry.id === responseId);
-      if (index >= 0) {
-        const clone = [...prev];
-        clone[index] = { ...clone[index], text: updated };
-        return clone;
-      }
-      return [...prev, { id: responseId, role: "assistant", text: updated }];
-    });
-  }, []);
+  const appendAssistantDelta = useCallback(
+    (responseId: string, delta: string) => {
+      if (!delta) return;
+      const updated =
+        (pendingResponsesRef.current.get(responseId) ?? "") + delta;
+      pendingResponsesRef.current.set(responseId, updated);
+      setTranscript((prev) => {
+        const index = prev.findIndex((entry) => entry.id === responseId);
+        if (index >= 0) {
+          const clone = [...prev];
+          clone[index] = { ...clone[index], text: updated };
+          return clone;
+        }
+        return [...prev, { id: responseId, role: "assistant", text: updated }];
+      });
+    },
+    []
+  );
 
   const handleServerMessage = useCallback(
     (event: MessageEvent<string>) => {
       try {
         const payload = JSON.parse(event.data) as Record<string, unknown>;
         const type = typeof payload.type === "string" ? payload.type : "";
-        if (type === "response.output_text.delta" || type === "response.output_audio_transcript.delta") {
-          appendAssistantDelta(extractResponseId(payload), normalizeDelta(payload));
+        if (
+          type === "response.output_text.delta" ||
+          type === "response.output_audio_transcript.delta"
+        ) {
+          appendAssistantDelta(
+            extractResponseId(payload),
+            normalizeDelta(payload)
+          );
           return;
         }
 
@@ -156,10 +173,13 @@ export function RealtimeConversationPanel(): JSX.Element {
             if (role === "user" && Array.isArray(content)) {
               const textPart = content.find(
                 (part) =>
-                  part && typeof part === "object" && (part as { type?: string }).type === "input_text"
+                  part &&
+                  typeof part === "object" &&
+                  (part as { type?: string }).type === "input_text"
               ) as { text?: unknown } | undefined;
               if (typeof textPart?.text === "string") {
-                const entryId = typeof id === "string" ? id : `user_${Date.now()}`;
+                const entryId =
+                  typeof id === "string" ? id : `user_${Date.now()}`;
                 setTranscript((prev) => [
                   ...prev,
                   { id: entryId, role: "user", text: textPart.text },
@@ -187,16 +207,26 @@ export function RealtimeConversationPanel(): JSX.Element {
     pendingResponsesRef.current.clear();
 
     try {
+      if (onShareVisionFrame) {
+        onShareVisionFrame().catch((err) => {
+          console.warn("Unable to capture context frame", err);
+        });
+      }
+
       const response = await fetch(`${API_BASE}/realtime/session`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
       });
       if (!response.ok) {
-        throw new Error(`Failed to create realtime session (${response.status})`);
+        throw new Error(
+          `Failed to create realtime session (${response.status})`
+        );
       }
       const token = (await response.json()) as RealtimeSessionToken;
       if (!token.client_secret || !token.url) {
-        throw new Error("Realtime session response is missing required fields.");
+        throw new Error(
+          "Realtime session response is missing required fields."
+        );
       }
 
       const pc = new RTCPeerConnection();
@@ -216,8 +246,13 @@ export function RealtimeConversationPanel(): JSX.Element {
         if (pc.connectionState === "connected") {
           setStatus("Connected – start speaking with the assistant.");
         }
-        if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
-          resetConnection("Connection lost. Try starting the conversation again.");
+        if (
+          pc.connectionState === "failed" ||
+          pc.connectionState === "disconnected"
+        ) {
+          resetConnection(
+            "Connection lost. Try starting the conversation again."
+          );
         }
       };
 
@@ -238,7 +273,9 @@ export function RealtimeConversationPanel(): JSX.Element {
         }
       });
 
-      const localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const localStream = await navigator.mediaDevices.getUserMedia({
+        audio: true,
+      });
       localStreamRef.current = localStream;
       localStream.getTracks().forEach((track) => {
         pc.addTrack(track, localStream);
@@ -275,7 +312,7 @@ export function RealtimeConversationPanel(): JSX.Element {
         resetConnection();
       }
     }
-  }, [handleServerMessage, isActive, isConnecting, resetConnection]);
+  }, [handleServerMessage, isActive, isConnecting, onShareVisionFrame, resetConnection]);
 
   const stopConversation = useCallback(() => {
     if (!isConnecting && !isActive) {
@@ -320,14 +357,26 @@ export function RealtimeConversationPanel(): JSX.Element {
       <Heading as="h2" size="4" className="mb-3 font-heading">
         Realtime conversation
       </Heading>
-      <Text className="text-sm text-slate-500 dark:text-slate-400">{status}</Text>
-      {error ? <Text className="mt-2 text-sm text-rose-500">{error}</Text> : null}
+      <Text className="text-sm text-slate-500 dark:text-slate-400">
+        {status}
+      </Text>
+      {error ? (
+        <Text className="mt-2 text-sm text-rose-500">{error}</Text>
+      ) : null}
 
       <div className="mt-4 flex flex-wrap items-center gap-3">
         <Button onClick={startConversation} disabled={isConnecting || isActive}>
-          {isConnecting ? "Connecting…" : isActive ? "Connected" : "Start conversation"}
+          {isConnecting
+            ? "Connecting…"
+            : isActive
+              ? "Connected"
+              : "Start conversation"}
         </Button>
-        <Button variant="outline" onClick={stopConversation} disabled={!isConnecting && !isActive}>
+        <Button
+          variant="destructive"
+          onClick={stopConversation}
+          disabled={!isConnecting && !isActive}
+        >
           Hang up
         </Button>
       </div>
@@ -336,7 +385,8 @@ export function RealtimeConversationPanel(): JSX.Element {
         <div className="max-h-60 overflow-y-auto rounded-xl border border-slate-200 bg-white/80 p-3 text-sm dark:border-slate-700 dark:bg-slate-950/60">
           {transcript.length === 0 ? (
             <Text className="text-sm text-slate-500 dark:text-slate-400">
-              Assistant transcripts and user utterances will appear here once the call starts.
+              Assistant transcripts and user utterances will appear here once
+              the call starts.
             </Text>
           ) : (
             <ul className="space-y-2">
@@ -345,7 +395,9 @@ export function RealtimeConversationPanel(): JSX.Element {
                   <Text className="block text-xs font-medium uppercase tracking-wide text-slate-400">
                     {entry.role}
                   </Text>
-                  <Text className="block text-slate-700 dark:text-slate-200">{entry.text}</Text>
+                  <Text className="block text-slate-700 dark:text-slate-200">
+                    {entry.text}
+                  </Text>
                 </li>
               ))}
             </ul>
@@ -363,11 +415,19 @@ export function RealtimeConversationPanel(): JSX.Element {
             type="text"
             value={inputValue}
             onChange={(event) => setInputValue(event.target.value)}
-            placeholder={isActive ? "Send a text prompt to the assistant" : "Connect to send a prompt"}
+            placeholder={
+              isActive
+                ? "Send a text prompt to the assistant"
+                : "Connect to send a prompt"
+            }
             disabled={!isActive}
-            className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
+            className="flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200 disabled:cursor-not-allowed disabled:opacity-60 dark:border-slate-600 dark:bg-slate-800 dark:text-slate-100 dark:placeholder-slate-400 dark:focus:border-slate-500 dark:focus:ring-slate-600"
           />
-          <Button type="submit" disabled={!isActive || !inputValue.trim()}>
+          <Button
+            type="submit"
+            variant="outline"
+            disabled={!isActive || !inputValue.trim()}
+          >
             Send message
           </Button>
         </form>

@@ -21,7 +21,7 @@ class ContextStorage:
         """Store visual context for a session."""
         with self._lock:
             self._storage[session_id] = context
-    
+
     def get_context(self, session_id: str) -> Optional[VisionContext]:
         """Retrieve visual context for a session."""
         with self._lock:
@@ -35,6 +35,27 @@ class ContextStorage:
                 return None
             
             return context
+
+    def get_latest_context(self) -> Optional[VisionContext]:
+        """Return the most recent, non-expired context across all sessions."""
+
+        now = datetime.now(timezone.utc)
+        with self._lock:
+            latest_context: Optional[VisionContext] = None
+            expired_sessions: list[str] = []
+
+            for session_id, context in self._storage.items():
+                if now - context.timestamp > self._ttl:
+                    expired_sessions.append(session_id)
+                    continue
+
+                if latest_context is None or context.timestamp > latest_context.timestamp:
+                    latest_context = context
+
+            for session_id in expired_sessions:
+                del self._storage[session_id]
+
+        return latest_context
     
     def clear_context(self, session_id: str) -> None:
         """Clear visual context for a session."""

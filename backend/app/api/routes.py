@@ -10,6 +10,7 @@ from app.api.dependencies import (
     get_auth_client,
     get_audio_storage,
     get_emotion_analyzer,
+    get_journal_coach,
     get_note_annotator,
     get_payment_service,
     get_realtime_client,
@@ -31,10 +32,12 @@ from app.schemas.realtime import (
     VisionFrameRequest,
     VisionFrameResponse,
 )
+from app.schemas.journal import JournalEntryRequest, JournalEntryResponse
 from app.schemas.note import NoteCreateRequest, NoteCreateResponse
 from app.schemas.tutor import TutorModeRequest, TutorModeResponse
 from app.services.auth import Auth0Client, Auth0ClientError
 from app.services.emotion import EmotionAnalyzer
+from app.services.journal import JournalCoach, JournalCoachError
 from app.services.note import NoteAnnotator, NoteAnnotationError
 from app.services.payment import StripePaymentError, StripePaymentService
 from app.services.realtime import RealtimeSessionClient, RealtimeSessionError
@@ -225,6 +228,43 @@ async def create_note(
         audio_url=audio_url,
         annotation=annotation.content,
         created_at=created_at,
+    )
+
+
+@router.post("/journals", response_model=JournalEntryResponse, tags=["journals"])
+async def create_journal_entry(
+    payload: JournalEntryRequest,
+    coach: JournalCoach = Depends(get_journal_coach),
+) -> JournalEntryResponse:
+    """Transform a free-form journal entry into guided reflections."""
+
+    try:
+        guidance = await coach.guide(
+            title=payload.title,
+            entry=payload.entry,
+            mood=payload.mood,
+            gratitude=payload.gratitude,
+            intention=payload.intention,
+            focus_area=payload.focus_area,
+        )
+    except JournalCoachError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    created_at = datetime.now(timezone.utc)
+
+    return JournalEntryResponse(
+        journal_id=str(uuid4()),
+        created_at=created_at,
+        title=payload.title,
+        entry=payload.entry,
+        mood=payload.mood,
+        gratitude=payload.gratitude,
+        intention=payload.intention,
+        focus_area=payload.focus_area,
+        ai_reflection=guidance.reflection,
+        affirmation=guidance.affirmation,
+        suggested_prompts=guidance.prompts,
+        breathing_exercise=guidance.breathwork,
     )
 
 

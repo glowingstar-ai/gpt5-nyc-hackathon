@@ -208,9 +208,11 @@ export function RealtimeConversationPanel({
 
     try {
       if (onShareVisionFrame) {
-        onShareVisionFrame().catch((err) => {
+        try {
+          await onShareVisionFrame();
+        } catch (err) {
           console.warn("Unable to capture context frame", err);
-        });
+        }
       }
 
       const response = await fetch(`${API_BASE}/realtime/session`, {

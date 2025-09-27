@@ -7,6 +7,7 @@ from app.services.emotion import EmotionAnalyzer
 from app.services.note import NoteAnnotator
 from app.services.realtime import RealtimeSessionClient
 from app.services.storage import S3AudioStorage, StorageServiceError
+from app.services.tutor import TutorModeService
 
 
 def get_settings() -> Settings:
@@ -71,3 +72,21 @@ def get_note_annotator() -> NoteAnnotator:
         base_url=settings.openai_api_base_url,
         model=settings.openai_annotation_model,
     )
+
+
+@lru_cache
+def _get_tutor_service() -> TutorModeService:
+    """Return a singleton tutor mode service configured from settings."""
+
+    settings = _get_settings()
+    return TutorModeService(
+        api_key=settings.openai_api_key,
+        base_url=settings.openai_api_base_url,
+        model="gpt-5",
+    )
+
+
+def get_tutor_service() -> TutorModeService:
+    """FastAPI dependency wrapper around the tutor service singleton."""
+
+    return _get_tutor_service()

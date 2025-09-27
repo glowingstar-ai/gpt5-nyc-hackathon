@@ -1,0 +1,192 @@
+#gpt5-live-companion-root {
+  all: initial;
+}
+
+#gpt5-live-companion-root *,
+#gpt5-live-companion-root *::before,
+#gpt5-live-companion-root *::after {
+  box-sizing: border-box;
+  font-family: "Inter", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+#gpt5-live-companion-root .gpt5-widget-wrapper {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 2147483647;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+#gpt5-live-companion-root .gpt5-hover-button {
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, #6366f1, #a855f7);
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 12px 30px rgba(99, 102, 241, 0.35);
+  color: white;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+#gpt5-live-companion-root .gpt5-hover-button:hover,
+#gpt5-live-companion-root .gpt5-hover-button:focus-visible {
+  transform: translateY(-2px) scale(1.05);
+  box-shadow: 0 16px 40px rgba(99, 102, 241, 0.4);
+  outline: none;
+}
+
+#gpt5-live-companion-root .gpt5-hover-button-icon {
+  font-size: 26px;
+  line-height: 1;
+}
+
+#gpt5-live-companion-root .gpt5-conversation-panel {
+  width: 340px;
+  max-height: 520px;
+  display: none;
+  flex-direction: column;
+  border-radius: 20px;
+  background: rgba(15, 23, 42, 0.92);
+  color: white;
+  box-shadow: 0 24px 48px rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(12px);
+  overflow: hidden;
+}
+
+#gpt5-live-companion-root .gpt5-conversation-panel.is-open {
+  display: flex;
+}
+
+#gpt5-live-companion-root .gpt5-panel-header {
+  padding: 18px 20px;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.85), rgba(236, 72, 153, 0.85));
+}
+
+#gpt5-live-companion-root .gpt5-panel-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+#gpt5-live-companion-root .gpt5-panel-status {
+  margin-top: 6px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+#gpt5-live-companion-root .gpt5-panel-body {
+  padding: 16px 20px 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+#gpt5-live-companion-root .gpt5-transcript {
+  flex: 1;
+  overflow-y: auto;
+  border-radius: 16px;
+  background: rgba(15, 23, 42, 0.6);
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  scrollbar-width: thin;
+}
+
+#gpt5-live-companion-root .gpt5-transcript::-webkit-scrollbar {
+  width: 6px;
+}
+
+#gpt5-live-companion-root .gpt5-transcript::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.45);
+  border-radius: 999px;
+}
+
+#gpt5-live-companion-root .gpt5-transcript-entry {
+  display: grid;
+  gap: 4px;
+}
+
+#gpt5-live-companion-root .gpt5-transcript-role {
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.85);
+}
+
+#gpt5-live-companion-root .gpt5-transcript-text {
+  font-size: 14px;
+  line-height: 1.45;
+  color: rgba(226, 232, 240, 0.95);
+  white-space: pre-wrap;
+}
+
+#gpt5-live-companion-root .gpt5-input-area {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+#gpt5-live-companion-root .gpt5-text-input {
+  width: 100%;
+  min-height: 48px;
+  border-radius: 14px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  background: rgba(15, 23, 42, 0.65);
+  color: rgba(226, 232, 240, 0.95);
+  padding: 12px 14px;
+  resize: vertical;
+  font-size: 14px;
+}
+
+#gpt5-live-companion-root .gpt5-text-input:focus-visible {
+  outline: 2px solid rgba(99, 102, 241, 0.55);
+  outline-offset: 2px;
+}
+
+#gpt5-live-companion-root .gpt5-actions {
+  display: flex;
+  gap: 10px;
+}
+
+#gpt5-live-companion-root .gpt5-button {
+  flex: 1;
+  border-radius: 12px;
+  border: none;
+  padding: 12px 16px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: transform 0.15s ease, opacity 0.15s ease;
+}
+
+#gpt5-live-companion-root .gpt5-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+#gpt5-live-companion-root .gpt5-button-primary {
+  background: linear-gradient(135deg, #6366f1, #ec4899);
+  color: white;
+}
+
+#gpt5-live-companion-root .gpt5-button-secondary {
+  background: rgba(226, 232, 240, 0.12);
+  color: rgba(226, 232, 240, 0.9);
+}
+
+#gpt5-live-companion-root .gpt5-error {
+  font-size: 12px;
+  color: #fca5a5;
+}
+
+#gpt5-live-companion-root audio {
+  display: none;
+}

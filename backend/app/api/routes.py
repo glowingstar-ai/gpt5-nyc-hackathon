@@ -11,6 +11,7 @@ from app.api.dependencies import (
     get_note_annotator,
     get_realtime_client,
     get_settings,
+    get_tutor_service,
 )
 from app.core.config import Settings
 from app.schemas.emotion import EmotionAnalysisRequest, EmotionAnalysisResponse
@@ -21,10 +22,12 @@ from app.schemas.realtime import (
     VisionFrameResponse,
 )
 from app.schemas.note import NoteCreateRequest, NoteCreateResponse
+from app.schemas.tutor import TutorModeRequest, TutorModeResponse
 from app.services.emotion import EmotionAnalyzer
 from app.services.note import NoteAnnotator, NoteAnnotationError
 from app.services.realtime import RealtimeSessionClient, RealtimeSessionError
 from app.services.storage import S3AudioStorage, StorageServiceError
+from app.services.tutor import TutorModeService
 
 router = APIRouter()
 
@@ -131,3 +134,13 @@ async def create_note(
         annotation=annotation.content,
         created_at=created_at,
     )
+
+
+@router.post("/tutor/mode", response_model=TutorModeResponse, tags=["tutor"])
+async def create_tutor_mode_plan(
+    payload: TutorModeRequest,
+    tutor_service: TutorModeService = Depends(get_tutor_service),
+) -> TutorModeResponse:
+    """Create a BabyAGI-inspired tutoring plan powered by GPT-5."""
+
+    return await tutor_service.generate_plan(payload)

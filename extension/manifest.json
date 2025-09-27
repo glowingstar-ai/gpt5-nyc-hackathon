@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "GPT5 Live Companion",
+  "description": "Injects a floating assistant icon that opens a realtime conversation powered by the GPT5 hackathon backend.",
+  "version": "0.1.0",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "http://localhost:8000/*"
+  ],
+  "action": {
+    "default_title": "GPT5 Live Companion"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["src/content-script.js"],
+      "css": ["src/content-styles.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}

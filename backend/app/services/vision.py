@@ -17,13 +17,15 @@ class VisionAnalysisError(RuntimeError):
 @dataclass(slots=True)
 class VisionContext:
     """Structured visual context extracted from a screenshot."""
-    
+
     description: str
     key_elements: list[str]
     user_intent: str | None
     actionable_items: list[str]
     timestamp: datetime
     source: str
+    image_base64: str
+    captured_at: datetime | None
 
 
 class VisionAnalyzer:
@@ -109,8 +111,13 @@ class VisionAnalyzer:
         except (KeyError, IndexError) as exc:
             raise VisionAnalysisError("Invalid response from vision API") from exc
         
-        return self._parse_analysis_response(content, captured_at, source)
-    
+        return self._parse_analysis_response(
+            content,
+            timestamp=captured_at,
+            source=source,
+            image_base64=image_base64,
+        )
+
     def _build_analysis_prompt(self, source: str) -> str:
         """Build the analysis prompt based on the source type."""
         
@@ -153,8 +160,10 @@ Focus on:
     def _parse_analysis_response(
         self,
         content: str,
+        *,
         timestamp: datetime,
         source: str,
+        image_base64: str,
     ) -> VisionContext:
         """Parse the analysis response into a structured VisionContext."""
         
@@ -178,8 +187,10 @@ Focus on:
                 actionable_items=data.get("actionable_items", []),
                 timestamp=timestamp,
                 source=source,
+                image_base64=image_base64,
+                captured_at=timestamp,
             )
-            
+
         except (json.JSONDecodeError, ValueError, KeyError) as exc:
             # Fallback to simple text parsing if JSON parsing fails
             return VisionContext(
@@ -189,4 +200,6 @@ Focus on:
                 actionable_items=[],
                 timestamp=timestamp,
                 source=source,
+                image_base64=image_base64,
+                captured_at=timestamp,
             )

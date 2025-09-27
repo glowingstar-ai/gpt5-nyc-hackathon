@@ -39,6 +39,25 @@ type VideoSnapshot = {
 
 type FaceLandmarkPoint = { x: number; y: number; z?: number };
 
+type SpeechRecognitionInstance = {
+  continuous: boolean;
+  interimResults: boolean;
+  lang: string;
+  start: () => void;
+  stop: () => void;
+  abort?: () => void;
+  onresult: ((event: any) => void) | null;
+  onerror: ((event: any) => void) | null;
+  onend: (() => void) | null;
+};
+
+type SpeechRecognitionConstructor = new () => SpeechRecognitionInstance;
+
+type SpeechRecognitionWindow = Window & {
+  SpeechRecognition?: SpeechRecognitionConstructor;
+  webkitSpeechRecognition?: SpeechRecognitionConstructor;
+};
+
 type FaceLandmarkerResult = {
   faceLandmarks: Array<Array<FaceLandmarkPoint>>;
 };
@@ -150,6 +169,8 @@ export default function EmotionConsole(): JSX.Element {
   const videoRafRef = useRef<number>();
   const pollIntervalRef = useRef<number>();
   const detectorRef = useRef<FaceLandmarker | null>(null);
+  const recognitionRef = useRef<SpeechRecognitionInstance | null>(null);
+  const shouldRestartRecognitionRef = useRef(false);
   const voiceFeaturesRef = useRef({
     energy: 0,
     pitch: 0,
@@ -181,6 +202,10 @@ export default function EmotionConsole(): JSX.Element {
   const [voiceSnapshot, setVoiceSnapshot] = useState<VoiceSnapshot | null>(null);
   const [videoSnapshot, setVideoSnapshot] = useState<VideoSnapshot | null>(null);
   const [analysis, setAnalysis] = useState<EmotionAnalysisResponse | null>(null);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [interimTranscript, setInterimTranscript] = useState("");
+  const [isSpeechSupported, setIsSpeechSupported] = useState(false);
+  const [transcriptionError, setTranscriptionError] = useState<string | null>(null);
 
   useEffect(() => {
     textRef.current = textInput;
@@ -189,6 +214,137 @@ export default function EmotionConsole(): JSX.Element {
   useEffect(() => {
     isRunningRef.current = isRunning;
   }, [isRunning]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const speechWindow = window as SpeechRecognitionWindow;
+    const SpeechRecognitionCtor =
+      speechWindow.SpeechRecognition ?? speechWindow.webkitSpeechRecognition;
+
+    if (!SpeechRecognitionCtor) {
+      setIsSpeechSupported(false);
+      return;
+    }
+
+    const recognition = new SpeechRecognitionCtor();
+    recognition.continuous = true;
+    recognition.interimResults = true;
+    recognition.lang = navigator?.language ?? "en-US";
+
+    recognition.onresult = (event: any) => {
+      let finalTranscript = "";
+      let interim = "";
+
+      for (let i = event.resultIndex; i < event.results.length; i += 1) {
+        const result = event.results[i];
+        const transcript = result?.[0]?.transcript ?? "";
+        if (!transcript) {
+          continue;
+        }
+
+        if (result.isFinal) {
+          finalTranscript = `${finalTranscript} ${transcript}`.trim();
+        } else {
+          interim = `${interim} ${transcript}`.trim();
+        }
+      }
+
+      if (finalTranscript) {
+        setTextInput((previous) => {
+          const trimmedFinal = finalTranscript.trim();
+          if (!trimmedFinal) {
+            return previous;
+          }
+          const needsSeparator = previous && !/\s$/.test(previous) ? " " : "";
+          return `${previous}${needsSeparator}${trimmedFinal}`;
+        });
+      }
+
+      setInterimTranscript(interim);
+      setTranscriptionError(null);
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error("Speech recognition error", event);
+      const errorType = event?.error;
+      if (errorType === "not-allowed" || errorType === "service-not-allowed") {
+        shouldRestartRecognitionRef.current = false;
+        setTranscriptionError(
+          "Speech recognition was blocked. Enable microphone permissions to transcribe automatically."
+        );
+      } else if (errorType && errorType !== "no-speech") {
+        setTranscriptionError("Speech recognition interrupted. Attempting to recover…");
+      }
+    };
+
+    recognition.onend = () => {
+      setIsTranscribing(false);
+      setInterimTranscript("");
+
+      if (isRunningRef.current && shouldRestartRecognitionRef.current) {
+        try {
+          recognition.start();
+          setIsTranscribing(true);
+        } catch (err) {
+          console.error("Failed to restart speech recognition", err);
+        }
+      }
+    };
+
+    recognitionRef.current = recognition;
+    setIsSpeechSupported(true);
+
+    return () => {
+      shouldRestartRecognitionRef.current = false;
+      recognition.onresult = null;
+      recognition.onerror = null;
+      recognition.onend = null;
+      try {
+        recognition.stop();
+      } catch (err) {
+        console.error("Failed to stop speech recognition", err);
+      }
+      recognitionRef.current = null;
+    };
+  }, []);
+
+  const startTranscription = useCallback(() => {
+    const recognition = recognitionRef.current;
+    if (!recognition) {
+      return;
+    }
+
+    try {
+      shouldRestartRecognitionRef.current = true;
+      setTranscriptionError(null);
+      setInterimTranscript("");
+      recognition.start();
+      setIsTranscribing(true);
+    } catch (err) {
+      console.error("Unable to start speech recognition", err);
+      setTranscriptionError("Unable to start speech recognition.");
+    }
+  }, []);
+
+  const stopTranscription = useCallback(() => {
+    const recognition = recognitionRef.current;
+    shouldRestartRecognitionRef.current = false;
+    setIsTranscribing(false);
+    setInterimTranscript("");
+
+    if (!recognition) {
+      return;
+    }
+
+    try {
+      recognition.stop();
+    } catch (err) {
+      console.error("Unable to stop speech recognition", err);
+    }
+  }, []);
 
   const cleanup = useCallback(async () => {
     window.clearInterval(pollIntervalRef.current);
@@ -223,9 +379,14 @@ export default function EmotionConsole(): JSX.Element {
     mediaStreamRef.current = null;
     stream?.getTracks().forEach((track) => track.stop());
 
+    stopTranscription();
+    isRunningRef.current = false;
+    setIsTranscribing(false);
+    setInterimTranscript("");
+    setTranscriptionError(null);
     setVoiceSnapshot(null);
     setVideoSnapshot(null);
-  }, []);
+  }, [stopTranscription]);
 
   useEffect(() => {
     return () => {
@@ -466,9 +627,17 @@ export default function EmotionConsole(): JSX.Element {
     try {
       setStatus("Requesting camera and microphone access…");
       setError(null);
+      setTranscriptionError(null);
+
+      setIsRunning(true);
+      isRunningRef.current = true;
 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: { facingMode: "user" } });
       mediaStreamRef.current = stream;
+
+      if (isSpeechSupported) {
+        startTranscription();
+      }
 
       const video = videoRef.current;
       if (video) {
@@ -508,8 +677,6 @@ export default function EmotionConsole(): JSX.Element {
 
       await initializeDetector();
 
-      setIsRunning(true);
-      isRunningRef.current = true;
       setStatus("Collecting real-time signals…");
       processAudio();
       processVideo().catch(() => undefined);
@@ -526,7 +693,7 @@ export default function EmotionConsole(): JSX.Element {
       await cleanup();
       setIsRunning(false);
     }
-  }, [cleanup, initializeDetector, processAudio, processVideo, sendAnalysis]);
+  }, [cleanup, initializeDetector, isSpeechSupported, processAudio, processVideo, sendAnalysis, startTranscription]);
 
   const stopSession = useCallback(async () => {
     if (!isRunningRef.current) {
@@ -570,6 +737,15 @@ export default function EmotionConsole(): JSX.Element {
       </div>
     ));
   }, [analysis]);
+
+  const displayedTranscript = useMemo(() => {
+    if (!isTranscribing || !interimTranscript) {
+      return textInput;
+    }
+
+    const needsSeparator = textInput && !/\s$/.test(textInput) ? " " : "";
+    return `${textInput}${needsSeparator}${interimTranscript}`;
+  }, [interimTranscript, isTranscribing, textInput]);
 
   return (
     <Theme appearance="inherit">
@@ -627,14 +803,49 @@ export default function EmotionConsole(): JSX.Element {
                 Text transcript
               </Heading>
               <textarea
-                value={textInput}
-                onChange={(event) => setTextInput(event.target.value)}
+                value={displayedTranscript}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setTextInput(value);
+                  setInterimTranscript("");
+                  setTranscriptionError(null);
+                }}
                 className="min-h-[140px] w-full resize-y rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:border-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-200 dark:border-slate-700 dark:bg-slate-950"
                 placeholder="Type or paste text captured from your conversation…"
               />
-              <Text className="mt-2 block text-xs text-slate-500 dark:text-slate-400">
-                The full transcript is sent with each inference window to enrich the prediction.
-              </Text>
+              <div className="mt-2 space-y-2">
+                <Text className="block text-xs text-slate-500 dark:text-slate-400">
+                  The full transcript is sent with each inference window to enrich the prediction.
+                </Text>
+                {isSpeechSupported ? (
+                  <div className="space-y-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-600 shadow-sm dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300">
+                    <div className="flex items-center justify-between font-semibold uppercase tracking-wide">
+                      <span>{isRunning ? "Live transcription" : "Transcription idle"}</span>
+                      {isRunning ? (
+                        <span className={isTranscribing ? "text-emerald-600 dark:text-emerald-400" : "text-slate-500 dark:text-slate-400"}>
+                          {isTranscribing ? "Listening" : "Initializing"}
+                        </span>
+                      ) : null}
+                    </div>
+                    <Text as="p" className="text-left text-sm text-slate-600 dark:text-slate-300">
+                      {interimTranscript
+                        ? interimTranscript
+                        : isRunning
+                          ? isTranscribing
+                            ? "Waiting for speech…"
+                            : "Preparing speech recognizer…"
+                          : "Start a session to automatically transcribe microphone input."}
+                    </Text>
+                  </div>
+                ) : (
+                  <Text className="text-xs text-slate-500 dark:text-slate-400">
+                    Your browser does not support automatic speech recognition. Enter transcript manually.
+                  </Text>
+                )}
+                {transcriptionError ? (
+                  <Text className="text-xs text-rose-500">{transcriptionError}</Text>
+                ) : null}
+              </div>
             </div>
           </div>
 

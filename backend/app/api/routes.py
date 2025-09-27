@@ -166,24 +166,12 @@ async def create_realtime_session(
     """Return an ephemeral client secret for establishing WebRTC sessions with visual context."""
 
     # Get the most recent visual context
-    recent_context = None
-    for session_id in list(context_storage._storage.keys()):
-        context = context_storage.get_context(session_id)
-        if context and (recent_context is None or context.timestamp > recent_context.timestamp):
-            recent_context = context
+    recent_context = context_storage.get_latest_context()
 
     # Enhance instructions with visual context if available
     enhanced_instructions = None
     latest_frame_base64: str | None = None
     if recent_context:
-        if recent_context:
-            print(f"Recent context image base64: {recent_context.image_base64}")
-            print(f"Recent context description: {recent_context.description}")
-            print(f"Recent context key elements: {recent_context.key_elements}")
-            print(f"Recent context user intent: {recent_context.user_intent}")
-            print(f"Recent context actionable items: {recent_context.actionable_items}")
-        else:
-            print("No recent context available.")
         latest_frame_base64 = recent_context.image_base64
         enhanced_instructions = f"""You are an AI assistant that can see and understand the user's current screen context.
 

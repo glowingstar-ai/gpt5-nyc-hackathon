@@ -1,11 +1,14 @@
 import base64
 import binascii
 from datetime import datetime, timezone
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException
 
 from app.api.dependencies import (
+    get_audio_storage,
     get_emotion_analyzer,
+    get_note_annotator,
     get_realtime_client,
     get_settings,
     get_tutor_service,
@@ -18,9 +21,12 @@ from app.schemas.realtime import (
     VisionFrameRequest,
     VisionFrameResponse,
 )
+from app.schemas.note import NoteCreateRequest, NoteCreateResponse
 from app.schemas.tutor import TutorModeRequest, TutorModeResponse
 from app.services.emotion import EmotionAnalyzer
+from app.services.note import NoteAnnotator, NoteAnnotationError
 from app.services.realtime import RealtimeSessionClient, RealtimeSessionError
+from app.services.storage import S3AudioStorage, StorageServiceError
 from app.services.tutor import TutorModeService
 
 router = APIRouter()
@@ -84,6 +90,49 @@ async def accept_vision_frame(payload: VisionFrameRequest) -> VisionFrameRespons
         bytes=len(decoded),
         captured_at=payload.captured_at,
         received_at=received_at,
+    )
+
+
+@router.post("/notes", response_model=NoteCreateResponse, tags=["notes"])
+async def create_note(
+    payload: NoteCreateRequest,
+    storage: S3AudioStorage = Depends(get_audio_storage),
+    annotator: NoteAnnotator = Depends(get_note_annotator),
+) -> NoteCreateResponse:
+    """Persist a note and request an annotated summary."""
+
+    audio_url: str | None = None
+    if payload.audio_base64:
+        try:
+            audio_bytes = base64.b64decode(payload.audio_base64, validate=True)
+        except (binascii.Error, ValueError) as exc:
+            raise HTTPException(status_code=400, detail="Invalid base64-encoded audio clip") from exc
+
+        try:
+            upload = storage.upload_audio(audio_bytes, payload.audio_mime_type)
+        except StorageServiceError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+        audio_url = upload.url
+
+    try:
+        annotation = await annotator.annotate(
+            title=payload.title,
+            content=payload.content,
+            audio_url=audio_url,
+        )
+    except NoteAnnotationError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    created_at = datetime.now(timezone.utc)
+
+    return NoteCreateResponse(
+        note_id=str(uuid4()),
+        title=payload.title,
+        content=payload.content,
+        audio_url=audio_url,
+        annotation=annotation.content,
+        created_at=created_at,
     )
 
 

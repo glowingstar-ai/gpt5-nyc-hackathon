@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
@@ -70,19 +71,27 @@ const previewHighlights = [
 export default function LandingPage(): JSX.Element {
   return (
     <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
-      <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900" aria-hidden />
+      <div
+        className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900"
+        aria-hidden
+      />
       <div className="pointer-events-none absolute -top-40 left-1/2 h-[32rem] w-[32rem] -translate-x-1/2 rounded-full bg-emerald-500/20 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-32 right-0 h-[28rem] w-[28rem] translate-x-1/3 rounded-full bg-purple-500/20 blur-3xl" />
 
       <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col px-6 pb-24 pt-12 sm:px-12 lg:px-16">
         <header className="flex items-center justify-between gap-6">
           <Link href="/" className="group inline-flex items-center gap-2">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-lime-400 text-slate-950 font-semibold">
-              EI
-            </span>
+            <Image
+              src="/glowingstar-logo.png"
+              alt="GlowingStar.AI logo"
+              width={40}
+              height={40}
+              className="h-10 w-10 rounded-xl object-cover"
+              priority
+            />
             <div className="flex flex-col">
               <span className="text-sm uppercase tracking-[0.35em] text-slate-300">
-                EmpathIQ
+                GlowingStar.AI
               </span>
               <span className="text-lg font-semibold text-slate-50">
                 Experience Studio
@@ -90,10 +99,17 @@ export default function LandingPage(): JSX.Element {
             </div>
           </Link>
           <div className="flex items-center gap-3">
-            <Button variant="ghost" asChild className="text-slate-200 hover:text-slate-50">
+            <Button
+              variant="ghost"
+              asChild
+              className="text-slate-200 hover:text-slate-50"
+            >
               <Link href="/emotion-console">Launch console</Link>
             </Button>
-            <Button className="bg-emerald-400 text-slate-950 hover:bg-emerald-300" asChild>
+            <Button
+              className="bg-emerald-400 text-slate-950 hover:bg-emerald-300"
+              asChild
+            >
               <Link href="/session-insights">Explore insights</Link>
             </Button>
           </div>
@@ -110,11 +126,20 @@ export default function LandingPage(): JSX.Element {
                 One intelligent workspace for real-time emotional intelligence.
               </h1>
               <p className="max-w-xl text-lg text-slate-300">
-                Navigate live conversations, replay coaching moments, and orchestrate customer-ready playbooks from a single, beautifully crafted studio experience.
+                Navigate live conversations, replay coaching moments, and
+                orchestrate customer-ready playbooks from a single, beautifully
+                crafted studio experience.
               </p>
               <div className="flex flex-wrap gap-4">
-                <Button size="lg" asChild className="bg-emerald-400 text-slate-950 hover:bg-emerald-300">
-                  <Link href="/emotion-console" className="flex items-center gap-2">
+                <Button
+                  size="lg"
+                  asChild
+                  className="bg-emerald-400 text-slate-950 hover:bg-emerald-300"
+                >
+                  <Link
+                    href="/emotion-console"
+                    className="flex items-center gap-2"
+                  >
                     Start live session
                     <ArrowUpRight className="h-4 w-4" />
                   </Link>
@@ -147,11 +172,16 @@ export default function LandingPage(): JSX.Element {
                 </div>
                 <div className="mt-6 space-y-6">
                   {previewHighlights.map((item) => (
-                    <div key={item.title} className="rounded-2xl border border-slate-800 bg-slate-950/30 p-5">
+                    <div
+                      key={item.title}
+                      className="rounded-2xl border border-slate-800 bg-slate-950/30 p-5"
+                    >
                       <h3 className="text-lg font-semibold text-slate-50">
                         {item.title}
                       </h3>
-                      <p className="mt-2 text-sm text-slate-400">{item.description}</p>
+                      <p className="mt-2 text-sm text-slate-400">
+                        {item.description}
+                      </p>
                     </div>
                   ))}
                 </div>
@@ -170,7 +200,8 @@ export default function LandingPage(): JSX.Element {
                 </h2>
               </div>
               <p className="max-w-md text-sm text-slate-400">
-                Each workspace is crafted to highlight the nuance of emotional intelligence—choose where to go next and continue the journey.
+                Each workspace is crafted to highlight the nuance of emotional
+                intelligence—choose where to go next and continue the journey.
               </p>
             </div>
             <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
@@ -204,31 +235,40 @@ export default function LandingPage(): JSX.Element {
           <section className="grid gap-8 rounded-3xl border border-slate-800 bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 p-8 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] md:p-12">
             <div className="space-y-5">
               <p className="text-sm uppercase tracking-[0.35em] text-slate-400">
-                Why teams choose EmpathIQ
+                Why teams choose GlowingStar.AI
               </p>
               <h2 className="text-3xl font-semibold text-slate-50">
-                Purpose-built for leaders who design remarkable customer journeys.
+                Purpose-built for leaders who design remarkable customer
+                journeys.
               </h2>
               <p className="text-sm leading-relaxed text-slate-400">
-                We combine advanced signal processing with playful, human-centered design so your team can see, feel, and respond to every emotional beat.
+                We combine advanced signal processing with playful,
+                human-centered design so your team can see, feel, and respond to
+                every emotional beat.
               </p>
               <div className="flex flex-col gap-4 sm:flex-row">
                 <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-5">
                   <p className="text-xs uppercase tracking-[0.25em] text-slate-500">
                     Adaptive intelligence
                   </p>
-                  <p className="mt-2 text-lg font-semibold text-slate-50">Dynamic weighting</p>
+                  <p className="mt-2 text-lg font-semibold text-slate-50">
+                    Dynamic weighting
+                  </p>
                   <p className="mt-1 text-sm text-slate-400">
-                    Our console adjusts to the strongest signals in the room so you always see what matters most.
+                    Our console adjusts to the strongest signals in the room so
+                    you always see what matters most.
                   </p>
                 </div>
                 <div className="rounded-2xl border border-slate-800 bg-slate-950/60 p-5">
                   <p className="text-xs uppercase tracking-[0.25em] text-slate-500">
                     Crafted experiences
                   </p>
-                  <p className="mt-2 text-lg font-semibold text-slate-50">Delightful micro-interactions</p>
+                  <p className="mt-2 text-lg font-semibold text-slate-50">
+                    Delightful micro-interactions
+                  </p>
                   <p className="mt-1 text-sm text-slate-400">
-                    Subtle animations and gradients guide your focus without overwhelming your senses.
+                    Subtle animations and gradients guide your focus without
+                    overwhelming your senses.
                   </p>
                 </div>
               </div>
@@ -239,7 +279,9 @@ export default function LandingPage(): JSX.Element {
                 Always-on signal clarity
               </div>
               <p className="text-lg font-semibold text-slate-50">
-                &ldquo;EmpathIQ translates every subtle shift into intuitive visuals. Our agents finally feel supported in the moment.&rdquo;
+                &ldquo;GlowingStar.AI translates every subtle shift into
+                intuitive visuals. Our agents finally feel supported in the
+                moment.&rdquo;
               </p>
               <div className="space-y-1 text-sm text-slate-400">
                 <p>Jordan Michaels</p>
@@ -251,7 +293,8 @@ export default function LandingPage(): JSX.Element {
 
         <footer className="mt-16 flex flex-col items-center gap-4 border-t border-slate-800/60 pt-8 text-center text-xs text-slate-500">
           <p>
-            Built with care for the GPT-5 NYC Hackathon. Inspired by the potential of emotionally intelligent AI.
+            Built with care for the GPT-5 NYC Hackathon. Inspired by the
+            potential of emotionally intelligent AI.
           </p>
           <div className="flex items-center gap-4 text-[0.7rem] uppercase tracking-[0.4em] text-slate-600">
             <span>Privacy-first</span>

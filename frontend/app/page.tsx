@@ -1,3 +1,4 @@
+import Image from "next/image";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
@@ -67,12 +68,17 @@ export default function LandingPage(): JSX.Element {
       <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col px-6 pb-24 pt-12 sm:px-12 lg:px-16">
         <header className="flex items-center justify-between gap-6">
           <Link href="/" className="group inline-flex items-center gap-2">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-emerald-400 to-lime-400 text-slate-950 font-semibold">
-              EI
-            </span>
+            <Image
+              src="/glowingstar-logo.png"
+              alt="GlowingStar.AI logo"
+              width={40}
+              height={40}
+              className="h-10 w-10 rounded-xl object-cover"
+              priority
+            />
             <div className="flex flex-col">
               <span className="text-sm uppercase tracking-[0.35em] text-slate-300">
-                EmpathIQ
+                GlowingStar.AI
               </span>
               <span className="text-lg font-semibold text-slate-50">
                 Experience Studio
@@ -194,7 +200,7 @@ export default function LandingPage(): JSX.Element {
           <section className="grid gap-8 rounded-3xl border border-slate-800 bg-gradient-to-br from-slate-900 via-slate-950 to-slate-900 p-8 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)] md:p-12">
             <div className="space-y-5">
               <p className="text-sm uppercase tracking-[0.35em] text-slate-400">
-                Why teams choose EmpathIQ
+                Why teams choose GlowingStar.AI
               </p>
               <h2 className="text-3xl font-semibold text-slate-50">
                 Purpose-built for leaders who design remarkable customer journeys.
@@ -229,7 +235,7 @@ export default function LandingPage(): JSX.Element {
                 Always-on signal clarity
               </div>
               <p className="text-lg font-semibold text-slate-50">
-                &ldquo;EmpathIQ translates every subtle shift into intuitive visuals. Our agents finally feel supported in the moment.&rdquo;
+                &ldquo;GlowingStar.AI translates every subtle shift into intuitive visuals. Our agents finally feel supported in the moment.&rdquo;
               </p>
               <div className="space-y-1 text-sm text-slate-400">
                 <p>Jordan Michaels</p>

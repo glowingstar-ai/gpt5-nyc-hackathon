@@ -1,9 +1,11 @@
 import base64
 import binascii
+import json
 from datetime import datetime, timezone
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from fastapi.responses import StreamingResponse
 from pydantic import HttpUrl
 
 from app.api.dependencies import (
@@ -13,6 +15,7 @@ from app.api.dependencies import (
     get_note_annotator,
     get_payment_service,
     get_realtime_client,
+    get_research_service,
     get_settings,
     get_tutor_service,
 )
@@ -31,6 +34,7 @@ from app.schemas.realtime import (
     VisionFrameRequest,
     VisionFrameResponse,
 )
+from app.schemas.research import ResearchPaperSummary, ResearchSearchRequest
 from app.schemas.note import NoteCreateRequest, NoteCreateResponse
 from app.schemas.tutor import TutorModeRequest, TutorModeResponse
 from app.services.auth import Auth0Client, Auth0ClientError
@@ -38,6 +42,7 @@ from app.services.emotion import EmotionAnalyzer
 from app.services.note import NoteAnnotator, NoteAnnotationError
 from app.services.payment import StripePaymentError, StripePaymentService
 from app.services.realtime import RealtimeSessionClient, RealtimeSessionError
+from app.services.research import ResearchDiscoveryService
 from app.services.storage import S3AudioStorage, StorageServiceError
 from app.services.tutor import TutorModeService
 
@@ -257,3 +262,125 @@ async def create_tutor_mode_plan(
     """Create a BabyAGI-inspired tutoring plan powered by GPT-5."""
 
     return await tutor_service.generate_plan(payload)
+
+
+def _encode_event(payload: dict[str, object]) -> str:
+    """Return a JSONL-safe representation of a streaming event."""
+
+    return json.dumps(payload, separators=(",", ":")) + "\n"
+
+
+@router.post(
+    "/research/discover",
+    response_model=None,
+    tags=["research"],
+    summary="Discover relevant arXiv papers with a streamed RAG workflow",
+)
+async def discover_research_papers(
+    payload: ResearchSearchRequest,
+    service: ResearchDiscoveryService = Depends(get_research_service),
+) -> StreamingResponse:
+    """Stream the reasoning trail for a research discovery request."""
+
+    top_k = payload.top_k or 5
+
+    async def event_stream():
+        try:
+            yield _encode_event(
+                {
+                    "type": "status",
+                    "stage": "expanding_query",
+                    "message": "Expanding your description with GPT-5",
+                }
+            )
+            expansions = await service.expand_query(payload.query)
+            yield _encode_event(
+                {
+                    "type": "expansion",
+                    "stage": "expanding_query",
+                    "message": "Generated expanded search intents",
+                    "expansions": expansions,
+                }
+            )
+
+            yield _encode_event(
+                {
+                    "type": "status",
+                    "stage": "retrieving_candidates",
+                    "message": "Querying arXiv for candidate papers",
+                }
+            )
+            candidates = await service.retrieve_papers(expansions)
+            yield _encode_event(
+                {
+                    "type": "retrieval",
+                    "stage": "retrieving_candidates",
+                    "message": f"Retrieved {len(candidates)} unique arXiv candidates",
+                    "count": len(candidates),
+                }
+            )
+
+            yield _encode_event(
+                {
+                    "type": "status",
+                    "stage": "ranking",
+                    "message": "Ranking candidates with Cohere's re-ranker",
+                }
+            )
+            ranked = await service.rank_papers(
+                query=payload.query, papers=candidates, top_k=top_k
+            )
+            ranked_summaries = [
+                paper.to_summary(score=score).model_dump(mode="json")
+                for paper, score in ranked
+            ]
+            yield _encode_event(
+                {
+                    "type": "ranking",
+                    "stage": "ranking",
+                    "message": "Identified the strongest matches",
+                    "total_candidates": len(candidates),
+                    "results": ranked_summaries,
+                }
+            )
+
+            enriched: list[ResearchPaperSummary] = []
+            for paper, score in ranked:
+                yield _encode_event(
+                    {
+                        "type": "status",
+                        "stage": "explaining",
+                        "message": f"Explaining relevance for {paper.title}",
+                        "paper_id": paper.paper_id,
+                    }
+                )
+                reason = await service.explain_relevance(query=payload.query, paper=paper)
+                summary = paper.to_summary(score=score, reason=reason)
+                enriched.append(summary)
+                yield _encode_event(
+                    {
+                        "type": "explanation",
+                        "stage": "explaining",
+                        "paper_id": paper.paper_id,
+                        "reason": reason,
+                    }
+                )
+
+            yield _encode_event(
+                {
+                    "type": "results",
+                    "stage": "complete",
+                    "message": "Finished building the research digest",
+                    "results": [item.model_dump(mode="json") for item in enriched],
+                }
+            )
+        except Exception as exc:  # pragma: no cover - defensive streaming guard
+            yield _encode_event(
+                {
+                    "type": "error",
+                    "stage": "error",
+                    "message": str(exc),
+                }
+            )
+
+    return StreamingResponse(event_stream(), media_type="application/jsonl")

@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     openai_annotation_model: str = Field(
         default="gpt-5.0", alias="OPENAI_ANNOTATION_MODEL"
     )
+    openai_research_model: str = Field(
+        default="gpt-5.0", alias="OPENAI_RESEARCH_MODEL"
+    )
     aws_access_key_id: str | None = Field(default=None, alias="AWS_ACCESS_KEY_ID")
     aws_secret_access_key: str | None = Field(
         default=None, alias="AWS_SECRET_ACCESS_KEY"
@@ -40,6 +43,17 @@ class Settings(BaseSettings):
         default=None, alias="STRIPE_DEFAULT_PRICE_ID"
     )
     stripe_mode: str = Field(default="subscription", alias="STRIPE_MODE")
+    cohere_api_key: str | None = Field(default=None, alias="COHERE_API_KEY")
+    cohere_api_base_url: str = Field(
+        default="https://api.cohere.com", alias="COHERE_API_BASE_URL"
+    )
+    cohere_rerank_model: str = Field(
+        default="rerank-english-v3.0", alias="COHERE_RERANK_MODEL"
+    )
+    arxiv_api_base_url: str = Field(
+        default="http://export.arxiv.org/api/query", alias="ARXIV_API_BASE_URL"
+    )
+    arxiv_max_results: int = Field(default=25, alias="ARXIV_MAX_RESULTS")
 
     model_config = {
         "env_file": ".env",

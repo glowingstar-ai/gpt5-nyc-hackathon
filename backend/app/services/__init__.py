@@ -4,6 +4,7 @@ from .auth import Auth0Client, Auth0ClientError, AuthTokens, AuthUserInfo
 from .emotion import EmotionAnalyzer, EmotionTaxonomy
 from .note import AnnotationResult, NoteAnnotator, NoteAnnotationError
 from .payment import CheckoutSession, StripePaymentError, StripePaymentService
+from .research import ResearchDiscoveryService
 from .storage import AudioUploadResult, S3AudioStorage, StorageServiceError
 from .tutor import TutorModeService
 
@@ -24,4 +25,5 @@ __all__ = [
     "S3AudioStorage",
     "StorageServiceError",
     "TutorModeService",
+    "ResearchDiscoveryService",
 ]

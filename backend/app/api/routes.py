@@ -173,13 +173,43 @@ async def create_realtime_session(
     latest_frame_base64: str | None = None
     if recent_context:
         latest_frame_base64 = recent_context.image_base64
+
+        summary_lines = []
+        if recent_context.description and recent_context.description.strip():
+            summary_lines.append(f"- Description: {recent_context.description.strip()}")
+
+        if recent_context.key_elements:
+            key_elements = [
+                element.strip()
+                for element in recent_context.key_elements
+                if element and element.strip()
+            ]
+            if key_elements:
+                summary_lines.append("- Key elements: " + ", ".join(key_elements))
+
+        if recent_context.user_intent and recent_context.user_intent.strip():
+            summary_lines.append(f"- User intent: {recent_context.user_intent.strip()}")
+
+        if recent_context.actionable_items:
+            actionable_items = [
+                item.strip()
+                for item in recent_context.actionable_items
+                if item and item.strip()
+            ]
+            if actionable_items:
+                summary_lines.append("- Actionable items: " + ", ".join(actionable_items))
+
+        if not summary_lines:
+            summary_lines.append(
+                "- Visual analysis metadata is unavailable. Request additional processing if you need structured details."
+            )
+
+        context_summary = "\n".join(summary_lines)
+
         enhanced_instructions = f"""You are an AI assistant that can see and understand the user's current screen context.
 
-Current visual context:
-- Description: {recent_context.description}
-- Key elements: {', '.join(recent_context.key_elements)}
-- User intent: {recent_context.user_intent or 'Not specified'}
-- Actionable items: {', '.join(recent_context.actionable_items)}
+Visual context summary:
+{context_summary}
 
 A raw base64-encoded frame captured by the client is available for immediate multimodal processing.
 

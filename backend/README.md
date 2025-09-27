@@ -39,6 +39,11 @@ Available settings (with defaults shown in `app/core/config.py`):
 - `PROJECT_NAME` — Name displayed in the OpenAPI docs (`GPT5 Hackathon API`).
 - `API_V1_PREFIX` — Root prefix for versioned routes (`/api/v1`).
 - `ENVIRONMENT` — Environment label for logging/monitoring (`development`).
+- `OPENAI_API_KEY` — Required to enable the realtime session endpoint (no default).
+- `OPENAI_API_BASE_URL` — Base URL for OpenAI's API (`https://api.openai.com/v1`).
+- `OPENAI_REALTIME_MODEL` — Realtime model identifier (`gpt-4o-realtime-preview-2024-12-17`).
+- `OPENAI_REALTIME_VOICE` — Voice used for speech output (`verse`).
+- `OPENAI_REALTIME_INSTRUCTIONS` — Optional system prompt for each session.
 
 If a key is omitted it will fall back to the default defined in `Settings`.
 

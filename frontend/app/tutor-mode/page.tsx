@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent, SVGProps } from "react";
 import Link from "next/link";
 import {
@@ -133,10 +133,20 @@ export default function TutorModePage(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [plan, setPlan] = useState<TutorModeResponse | null>(null);
+  const [activeStage, setActiveStage] = useState<string | null>(null);
 
   const formattedTimestamp = useMemo(() => {
     if (!plan) return null;
     return formatDate(plan.generated_at);
+  }, [plan]);
+
+  useEffect(() => {
+    if (!plan) {
+      setActiveStage(null);
+      return;
+    }
+
+    setActiveStage("understanding");
   }, [plan]);
 
   const handleToggleModality = useCallback((value: TutorTeachingModalityKind) => {
@@ -403,201 +413,305 @@ export default function TutorModePage(): JSX.Element {
                   </ul>
                 </div>
               </div>
-
-              <section className="space-y-4">
-                <header className="flex items-center gap-2 text-sm font-semibold text-slate-200">
-                  <Compass className="h-4 w-4 text-sky-300" />
-                  Step 0 · Understand the learner
-                </header>
-                <div className="space-y-4 rounded-lg border border-slate-800/70 bg-slate-950/60 p-4 text-sm text-slate-300">
-                  <div>
-                    <h5 className="font-semibold text-slate-200">Approach</h5>
-                    <p className="mt-1">{plan.understanding.approach}</p>
-                  </div>
-                  <div>
-                    <h5 className="font-semibold text-slate-200">Diagnostic questions</h5>
-                    <ul className="mt-1 space-y-1">
-                      {plan.understanding.diagnostic_questions.map((question) => (
-                        <li key={question} className="rounded-md border border-slate-800/70 bg-slate-950/60 px-3 py-2">
-                          {question}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                  <div>
-                    <h5 className="font-semibold text-slate-200">Signals to watch</h5>
-                    <ul className="mt-1 flex flex-wrap gap-2 text-xs">
-                      {plan.understanding.signals_to_watch.map((signal) => (
-                        <li
-                          key={signal}
-                          className="rounded-full border border-slate-800/70 bg-slate-950/80 px-3 py-1 text-slate-300"
-                        >
-                          {signal}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              </section>
-
-              <section className="space-y-4">
-                <header className="flex items-center gap-2 text-sm font-semibold text-slate-200">
-                  <BookOpen className="h-4 w-4 text-indigo-300" />
-                  Step 1 · Concept breakdowns
-                </header>
-                <div className="space-y-4">
-                  {plan.concept_breakdown.map((concept) => (
-                    <article
-                      key={`${concept.concept}-${concept.llm_reasoning.slice(0, 12)}`}
-                      className="rounded-lg border border-slate-800/70 bg-slate-950/60 p-4 text-sm text-slate-300"
-                    >
-                      <h5 className="text-base font-semibold text-slate-100">{concept.concept}</h5>
-                      <p className="mt-1 text-slate-300">{concept.llm_reasoning}</p>
-                      <div className="mt-3">
-                        <h6 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                          Subtopics
-                        </h6>
-                        <ul className="mt-1 flex flex-wrap gap-2 text-xs">
-                          {concept.subtopics.map((topic) => (
-                            <li
-                              key={topic}
-                              className="rounded-full border border-slate-800/70 bg-slate-950/80 px-3 py-1"
-                            >
-                              {topic}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                      <div className="mt-3">
-                        <h6 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                          Real-world connections
-                        </h6>
-                        <ul className="mt-1 space-y-1">
-                          {concept.real_world_connections.map((connection) => (
-                            <li
-                              key={connection}
-                              className="rounded-md border border-slate-800/70 bg-slate-950/70 px-3 py-2"
-                            >
-                              {connection}
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              </section>
-
-              <section className="space-y-4">
-                <header className="flex items-center gap-2 text-sm font-semibold text-slate-200">
-                  <Sparkles className="h-4 w-4 text-amber-300" />
-                  Step 2 · Teaching modalities
-                </header>
-                <div className="space-y-3">
-                  {plan.teaching_modalities.map((modality) => (
-                    <article
-                      key={`${modality.modality}-${modality.description.slice(0, 12)}`}
-                      className="rounded-lg border border-slate-800/70 bg-slate-950/60 p-4 text-sm text-slate-300"
-                    >
-                      <h5 className="text-base font-semibold capitalize text-slate-100">
-                        {modality.modality}
-                      </h5>
-                      <p className="mt-1">{modality.description}</p>
-                      {modality.resources.length > 0 ? (
-                        <div className="mt-3">
-                          <h6 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                            Resources
-                          </h6>
-                          <ul className="mt-1 list-disc space-y-1 pl-5">
-                            {modality.resources.map((resource) => (
-                              <li key={resource}>{resource}</li>
-                            ))}
-                          </ul>
-                        </div>
-                      ) : null}
-                    </article>
-                  ))}
-                </div>
-              </section>
-
-              <section className="space-y-4">
-                <header className="flex items-center gap-2 text-sm font-semibold text-slate-200">
-                  <ClipboardList className="h-4 w-4 text-emerald-300" />
-                  Step 3 · Assessment plan
-                </header>
-                <article className="space-y-4 rounded-lg border border-slate-800/70 bg-slate-950/60 p-4 text-sm text-slate-300">
-                  <div>
-                    <h5 className="text-base font-semibold text-slate-100">{plan.assessment.title}</h5>
-                    <p className="mt-1 text-xs uppercase tracking-wide text-slate-400">
-                      {plan.assessment.format}
-                    </p>
-                    <p className="mt-2">{plan.assessment.human_in_the_loop_notes}</p>
-                  </div>
-                  <div className="space-y-3">
-                    {plan.assessment.items.map((item, index) => (
-                      <div
-                        key={`${item.prompt}-${index}`}
-                        className="rounded-lg border border-slate-800/70 bg-slate-950/60 p-3"
-                      >
-                        <div className="flex items-center justify-between text-xs uppercase tracking-wide text-slate-400">
-                          <span>{item.kind.replace(/_/g, " ")}</span>
-                          <span>Item {index + 1}</span>
-                        </div>
-                        <p className="mt-2 text-sm text-slate-200">{item.prompt}</p>
-                        {item.options && item.options.length > 0 ? (
-                          <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-slate-300">
-                            {item.options.map((option) => (
-                              <li key={option}>{option}</li>
-                            ))}
-                          </ul>
-                        ) : null}
-                        {item.answer_key ? (
-                          <p className="mt-2 text-xs text-emerald-300">Answer key: {item.answer_key}</p>
-                        ) : null}
-                      </div>
-                    ))}
-                  </div>
-                </article>
-              </section>
-
-              <section className="space-y-4">
-                <header className="flex items-center gap-2 text-sm font-semibold text-slate-200">
-                  <CheckCircle2 className="h-4 w-4 text-emerald-300" />
-                  Step 4 · Completion signals
-                </header>
-                <article className="space-y-4 rounded-lg border border-slate-800/70 bg-slate-950/60 p-4 text-sm text-slate-300">
-                  <div>
-                    <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                      Mastery indicators
-                    </h5>
-                    <ul className="mt-1 list-disc space-y-1 pl-5">
-                      {plan.completion.mastery_indicators.map((indicator) => (
-                        <li key={indicator}>{indicator}</li>
-                      ))}
-                    </ul>
-                  </div>
-                  <div>
-                    <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                      Wrap-up plan
-                    </h5>
-                    <p className="mt-1">{plan.completion.wrap_up_plan}</p>
-                  </div>
-                  <div>
-                    <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                      Follow-up suggestions
-                    </h5>
-                    <ul className="mt-1 list-disc space-y-1 pl-5">
-                      {plan.completion.follow_up_suggestions.map((suggestion) => (
-                        <li key={suggestion}>{suggestion}</li>
-                      ))}
-                    </ul>
-                  </div>
-                </article>
-              </section>
+              <StageMachine plan={plan} activeStage={activeStage} onStageChange={setActiveStage} />
             </div>
           )}
         </section>
       </main>
+    </div>
+  );
+}
+
+type StageMachineProps = {
+  plan: TutorModeResponse;
+  activeStage: string | null;
+  onStageChange: (stageId: string) => void;
+};
+
+type StageConfig = {
+  id: string;
+  stepNumber: number;
+  title: string;
+  description: string;
+  icon: (props: SVGProps<SVGSVGElement>) => JSX.Element;
+  accent: string;
+  content: JSX.Element;
+};
+
+function StageMachine({ plan, activeStage, onStageChange }: StageMachineProps) {
+  const stages = useMemo<StageConfig[]>(
+    () => [
+      {
+        id: "understanding",
+        stepNumber: 0,
+        title: "Understand the learner",
+        description: "Assess readiness and calibrate tone.",
+        icon: Compass,
+        accent: "text-sky-300",
+        content: (
+          <div className="space-y-4 rounded-xl border border-slate-800/70 bg-slate-950/60 p-4 text-sm text-slate-300 shadow-lg shadow-sky-500/10">
+            <div>
+              <h5 className="font-semibold text-slate-200">Approach</h5>
+              <p className="mt-1">{plan.understanding.approach}</p>
+            </div>
+            <div>
+              <h5 className="font-semibold text-slate-200">Diagnostic questions</h5>
+              <ul className="mt-1 space-y-1">
+                {plan.understanding.diagnostic_questions.map((question) => (
+                  <li key={question} className="rounded-md border border-slate-800/70 bg-slate-950/60 px-3 py-2">
+                    {question}
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <h5 className="font-semibold text-slate-200">Signals to watch</h5>
+              <ul className="mt-1 flex flex-wrap gap-2 text-xs">
+                {plan.understanding.signals_to_watch.map((signal) => (
+                  <li
+                    key={signal}
+                    className="rounded-full border border-slate-800/70 bg-slate-950/80 px-3 py-1 text-slate-300"
+                  >
+                    {signal}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        ),
+      },
+      {
+        id: "concepts",
+        stepNumber: 1,
+        title: "Concept breakdowns",
+        description: "Sequence the instructional narrative.",
+        icon: BookOpen,
+        accent: "text-indigo-300",
+        content: (
+          <div className="space-y-4">
+            {plan.concept_breakdown.map((concept) => (
+              <article
+                key={`${concept.concept}-${concept.llm_reasoning.slice(0, 12)}`}
+                className="rounded-xl border border-slate-800/70 bg-slate-950/60 p-4 text-sm text-slate-300 shadow-lg shadow-indigo-500/10"
+              >
+                <h5 className="text-base font-semibold text-slate-100">{concept.concept}</h5>
+                <p className="mt-1 text-slate-300">{concept.llm_reasoning}</p>
+                <div className="mt-3">
+                  <h6 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Subtopics</h6>
+                  <ul className="mt-1 flex flex-wrap gap-2 text-xs">
+                    {concept.subtopics.map((topic) => (
+                      <li
+                        key={topic}
+                        className="rounded-full border border-slate-800/70 bg-slate-950/80 px-3 py-1"
+                      >
+                        {topic}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+                <div className="mt-3">
+                  <h6 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+                    Real-world connections
+                  </h6>
+                  <ul className="mt-1 space-y-1">
+                    {concept.real_world_connections.map((connection) => (
+                      <li
+                        key={connection}
+                        className="rounded-md border border-slate-800/70 bg-slate-950/70 px-3 py-2"
+                      >
+                        {connection}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </article>
+            ))}
+          </div>
+        ),
+      },
+      {
+        id: "modalities",
+        stepNumber: 2,
+        title: "Teaching modalities",
+        description: "Mix formats to keep momentum.",
+        icon: Sparkles,
+        accent: "text-amber-300",
+        content: (
+          <div className="space-y-3">
+            {plan.teaching_modalities.map((modality) => (
+              <article
+                key={`${modality.modality}-${modality.description.slice(0, 12)}`}
+                className="rounded-xl border border-slate-800/70 bg-slate-950/60 p-4 text-sm text-slate-300 shadow-lg shadow-amber-500/10"
+              >
+                <h5 className="text-base font-semibold capitalize text-slate-100">{modality.modality}</h5>
+                <p className="mt-1">{modality.description}</p>
+                {modality.resources.length > 0 ? (
+                  <div className="mt-3">
+                    <h6 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Resources</h6>
+                    <ul className="mt-1 list-disc space-y-1 pl-5">
+                      {modality.resources.map((resource) => (
+                        <li key={resource}>{resource}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+              </article>
+            ))}
+          </div>
+        ),
+      },
+      {
+        id: "assessment",
+        stepNumber: 3,
+        title: "Assessment plan",
+        description: "Check for understanding and depth.",
+        icon: ClipboardList,
+        accent: "text-emerald-300",
+        content: (
+          <article className="space-y-4 rounded-xl border border-slate-800/70 bg-slate-950/60 p-4 text-sm text-slate-300 shadow-lg shadow-emerald-500/10">
+            <div>
+              <h5 className="text-base font-semibold text-slate-100">{plan.assessment.title}</h5>
+              <p className="mt-1 text-xs uppercase tracking-wide text-slate-400">{plan.assessment.format}</p>
+              <p className="mt-2">{plan.assessment.human_in_the_loop_notes}</p>
+            </div>
+            <div className="space-y-3">
+              {plan.assessment.items.map((item, index) => (
+                <div
+                  key={`${item.prompt}-${index}`}
+                  className="rounded-lg border border-slate-800/70 bg-slate-950/60 p-3"
+                >
+                  <div className="flex items-center justify-between text-xs uppercase tracking-wide text-slate-400">
+                    <span>{item.kind.replace(/_/g, " ")}</span>
+                    <span>Item {index + 1}</span>
+                  </div>
+                  <p className="mt-2 text-sm text-slate-200">{item.prompt}</p>
+                  {item.options && item.options.length > 0 ? (
+                    <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-slate-300">
+                      {item.options.map((option) => (
+                        <li key={option}>{option}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  {item.answer_key ? (
+                    <p className="mt-2 text-xs text-emerald-300">Answer key: {item.answer_key}</p>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          </article>
+        ),
+      },
+      {
+        id: "completion",
+        stepNumber: 4,
+        title: "Completion signals",
+        description: "Lock in mastery and next steps.",
+        icon: CheckCircle2,
+        accent: "text-emerald-300",
+        content: (
+          <article className="space-y-4 rounded-xl border border-slate-800/70 bg-slate-950/60 p-4 text-sm text-slate-300 shadow-lg shadow-emerald-500/10">
+            <div>
+              <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Mastery indicators</h5>
+              <ul className="mt-1 list-disc space-y-1 pl-5">
+                {plan.completion.mastery_indicators.map((indicator) => (
+                  <li key={indicator}>{indicator}</li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Wrap-up plan</h5>
+              <p className="mt-1">{plan.completion.wrap_up_plan}</p>
+            </div>
+            <div>
+              <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Follow-up suggestions</h5>
+              <ul className="mt-1 list-disc space-y-1 pl-5">
+                {plan.completion.follow_up_suggestions.map((suggestion) => (
+                  <li key={suggestion}>{suggestion}</li>
+                ))}
+              </ul>
+            </div>
+          </article>
+        ),
+      },
+    ],
+    [plan]
+  );
+
+  const currentStage = useMemo(() => {
+    if (stages.length === 0) return null;
+    return stages.find((stage) => stage.id === activeStage) ?? stages[0];
+  }, [activeStage, stages]);
+
+  if (!currentStage) return null;
+
+  const CurrentIcon = currentStage.icon;
+
+  return (
+    <div className="space-y-5">
+      <div className="rounded-lg border border-slate-800/70 bg-slate-950/40 p-4">
+        <h4 className="text-sm font-semibold text-slate-200">Tutor mode state machine</h4>
+        <p className="mt-1 text-xs text-slate-400">
+          Navigate between orchestration stages. The highlighted card shows the currently active phase of the
+          teaching loop.
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-6 lg:flex-row">
+        <aside className="lg:w-64">
+          <ol className="space-y-3">
+            {stages.map((stage) => {
+              const Icon = stage.icon;
+              const isActive = stage.id === currentStage.id;
+              return (
+                <li key={stage.id}>
+                  <button
+                    type="button"
+                    onClick={() => onStageChange(stage.id)}
+                    className={cn(
+                      "w-full rounded-lg border px-4 py-3 text-left text-sm transition focus:outline-none focus:ring-2 focus:ring-amber-300/60",
+                      isActive
+                        ? "border-emerald-300/70 bg-emerald-300/10 text-slate-100 shadow-lg shadow-emerald-500/20"
+                        : "border-slate-800/70 bg-slate-950/60 text-slate-300 hover:border-emerald-300/40 hover:text-slate-100"
+                    )}
+                  >
+                    <span className="flex items-center gap-3">
+                      <span
+                        className={cn(
+                          "flex h-8 w-8 items-center justify-center rounded-full border border-slate-800/70 bg-slate-950/80",
+                          stage.accent
+                        )}
+                      >
+                        <Icon className="h-4 w-4" />
+                      </span>
+                      <span className="flex flex-col">
+                        <span className="text-xs uppercase tracking-wide text-slate-400">
+                          Step {stage.stepNumber}
+                        </span>
+                        <span className="font-semibold text-slate-200">{stage.title}</span>
+                        <span className="text-xs text-slate-400">{stage.description}</span>
+                      </span>
+                    </span>
+                    {isActive ? (
+                      <span className="mt-3 inline-flex items-center gap-2 rounded-full border border-emerald-400/60 bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-200">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" aria-hidden />
+                        Active stage
+                      </span>
+                    ) : null}
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
+        </aside>
+
+        <section className="flex-1 space-y-4">
+          <header className="flex items-center gap-3 text-sm font-semibold text-slate-200">
+            <CurrentIcon className={cn("h-4 w-4", currentStage.accent)} />
+            Step {currentStage.stepNumber} · {currentStage.title}
+          </header>
+          {currentStage.content}
+        </section>
+      </div>
     </div>
   );
 }

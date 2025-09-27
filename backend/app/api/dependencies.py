@@ -5,6 +5,7 @@ from fastapi import HTTPException
 from app.core.config import Settings, get_settings as _get_settings
 from app.services.emotion import EmotionAnalyzer
 from app.services.realtime import RealtimeSessionClient
+from app.services.tutor import TutorModeService
 
 
 def get_settings() -> Settings:
@@ -40,3 +41,21 @@ def get_realtime_client() -> RealtimeSessionClient:
         voice=settings.openai_realtime_voice,
         instructions=settings.openai_realtime_instructions,
     )
+
+
+@lru_cache
+def _get_tutor_service() -> TutorModeService:
+    """Return a singleton tutor mode service configured from settings."""
+
+    settings = _get_settings()
+    return TutorModeService(
+        api_key=settings.openai_api_key,
+        base_url=settings.openai_api_base_url,
+        model="gpt-5",
+    )
+
+
+def get_tutor_service() -> TutorModeService:
+    """FastAPI dependency wrapper around the tutor service singleton."""
+
+    return _get_tutor_service()

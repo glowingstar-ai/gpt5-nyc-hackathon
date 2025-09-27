@@ -153,8 +153,8 @@ export default function LandingPage(): JSX.Element {
               />
             </div>
             <div className="flex flex-col">
-              <span className="text-xs uppercase tracking-[0.45em] text-amber-200/90">
-                A Glowing Star
+              <span className="text-xs font-medium tracking-[0.3em] text-amber-200/90">
+                Glowingstar.ai
               </span>
               <span className="text-xl font-semibold text-slate-50">
                 Experience Studio

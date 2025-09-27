@@ -61,6 +61,7 @@ export default function RealtimeAssistantPage(): JSX.Element {
   const [shareStatus, setShareStatus] = useState<ShareStatus>("idle");
   const [shareMessage, setShareMessage] = useState<string | null>(null);
   const [lastSharedAt, setLastSharedAt] = useState<string | null>(null);
+  const [lastSharedPreview, setLastSharedPreview] = useState<string | null>(null);
 
   useEffect(() => {
     return () => {
@@ -70,12 +71,14 @@ export default function RealtimeAssistantPage(): JSX.Element {
     };
   }, []);
 
-  const shareUiContext = useCallback(async () => {
+  const shareUiContext = useCallback(async ({ silent = false } = {}) => {
     const target = surfaceRef.current;
     if (!target) {
       const error = new Error("Context surface is not ready to capture yet.");
-      setShareStatus("error");
-      setShareMessage(error.message);
+      if (!silent) {
+        setShareStatus("error");
+        setShareMessage(error.message);
+      }
       throw error;
     }
 
@@ -88,8 +91,10 @@ export default function RealtimeAssistantPage(): JSX.Element {
       window.clearTimeout(timeoutRef.current);
     }
 
-    setShareStatus("capturing");
-    setShareMessage("Capturing and analyzing your current workspace…");
+    if (!silent) {
+      setShareStatus("capturing");
+      setShareMessage("Capturing and analyzing your current workspace…");
+    }
 
     try {
       const canvas = await html2canvas(target, {
@@ -121,23 +126,32 @@ export default function RealtimeAssistantPage(): JSX.Element {
 
       const timestamp = new Date().toISOString();
       setLastSharedAt(timestamp);
-      setShareStatus("shared");
-      setShareMessage(
-        "Analyzed and shared your workspace context with the assistant."
-      );
+      setLastSharedPreview(dataUrl);
+      if (!silent) {
+        setShareStatus("shared");
+        setShareMessage(
+          "Analyzed and shared your workspace context with the assistant."
+        );
 
-      timeoutRef.current = window.setTimeout(() => {
-        setShareStatus("idle");
-        setShareMessage(null);
-      }, 2500);
+        timeoutRef.current = window.setTimeout(() => {
+          setShareStatus("idle");
+          setShareMessage(null);
+        }, 2500);
+      } else {
+        setShareStatus("shared");
+        setShareMessage("Context automatically refreshed for realtime sync.");
+      }
     } catch (err) {
       console.error("Unable to capture UI context", err);
       const message =
         err instanceof Error
           ? err.message
           : "Unable to capture the current UI for context sharing.";
-      setShareStatus("error");
-      setShareMessage(message);
+      if (!silent) {
+        setShareStatus("error");
+        setShareMessage(message);
+      }
+      setLastSharedPreview(null);
       throw err instanceof Error ? err : new Error(message);
     } finally {
       shareInFlightRef.current = false;
@@ -192,7 +206,9 @@ export default function RealtimeAssistantPage(): JSX.Element {
           </header>
 
           <section className="relative z-10 mt-10 grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-            <RealtimeConversationPanel onShareVisionFrame={shareUiContext} />
+            <RealtimeConversationPanel
+              onShareVisionFrame={() => shareUiContext({ silent: true })}
+            />
 
             <div className="space-y-5 rounded-2xl border border-slate-800/60 bg-slate-900/75 p-6 shadow-[0_25px_50px_-20px_rgba(15,23,42,0.65)] backdrop-blur">
               <Heading as="h2" size="4" className="font-heading text-slate-50">
@@ -204,6 +220,32 @@ export default function RealtimeAssistantPage(): JSX.Element {
                 sent before each conversation, giving the assistant full context
                 about your current workspace, applications, and tasks.
               </Text>
+              {lastSharedPreview ? (
+                <figure className="overflow-hidden rounded-xl border border-slate-800/80 bg-slate-950/80 shadow-lg">
+                  <div className="relative">
+                    <div className="absolute inset-x-0 top-0 z-10 bg-gradient-to-b from-slate-950/70 via-slate-950/10 to-transparent px-4 py-3">
+                      <Text className="text-xs font-medium uppercase tracking-wide text-emerald-300">
+                        Latest shared view
+                      </Text>
+                      {lastSharedLabel ? (
+                        <Text className="text-[11px] text-slate-200/80">
+                          Captured at {lastSharedLabel}
+                        </Text>
+                      ) : null}
+                    </div>
+                    <img
+                      src={lastSharedPreview}
+                      alt="Latest screenshot shared with the assistant"
+                      className="max-h-72 w-full object-cover"
+                    />
+                  </div>
+                  <figcaption className="border-t border-slate-800/80 bg-slate-950/60 px-4 py-3 text-xs text-slate-400">
+                    This preview mirrors the exact screenshot transmitted to GPT-5 in the
+                    realtime session, helping you confirm the assistant sees the correct
+                    workspace.
+                  </figcaption>
+                </figure>
+              ) : null}
               <div
                 className={`space-y-2 rounded-xl border px-4 py-3 transition-colors ${statusCardTone}`}
               >

@@ -420,7 +420,7 @@ export default function ResearchExplorerPage(): JSX.Element {
             </div>
             <div className="flex flex-wrap items-center justify-between gap-4">
               <p className="text-xs text-slate-400">
-                We'll expand your search with GPT-5, run arXiv retrieval, Cohere re-ranking, and send back GPT-5 explanations for the top matches.
+                We&apos;ll expand your search with GPT-5, run arXiv retrieval, Cohere re-ranking, and send back GPT-5 explanations for the top matches.
               </p>
               <Button
                 type="submit"

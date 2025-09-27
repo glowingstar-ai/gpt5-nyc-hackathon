@@ -168,7 +168,7 @@ async def create_realtime_session(
 
 @router.post("/vision/frame", response_model=VisionFrameResponse, tags=["vision"])
 async def accept_vision_frame(payload: VisionFrameRequest) -> VisionFrameResponse:
-    """Accept a base64-encoded frame from the client camera feed."""
+    """Accept a base64-encoded frame from the client camera or UI surface."""
 
     try:
         decoded = base64.b64decode(payload.image_base64, validate=True)
@@ -182,6 +182,7 @@ async def accept_vision_frame(payload: VisionFrameRequest) -> VisionFrameRespons
         bytes=len(decoded),
         captured_at=payload.captured_at,
         received_at=received_at,
+        source=payload.source,
     )
 
 

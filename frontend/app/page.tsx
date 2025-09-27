@@ -5,6 +5,7 @@ import { Theme, Heading, Text } from "@radix-ui/themes";
 import "@radix-ui/themes/styles.css";
 
 import { Button } from "@/components/ui/button";
+import RealtimeConversationPanel from "@/components/realtime-conversation";
 
 type EmotionProbabilities = Record<string, number>;
 
@@ -149,6 +150,9 @@ export default function EmotionConsole(): JSX.Element {
   const audioRafRef = useRef<number>();
   const videoRafRef = useRef<number>();
   const pollIntervalRef = useRef<number>();
+  const photoIntervalRef = useRef<number>();
+  const captureCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const frameUploadInFlightRef = useRef(false);
   const detectorRef = useRef<FaceLandmarker | null>(null);
   const voiceFeaturesRef = useRef({
     energy: 0,
@@ -192,11 +196,15 @@ export default function EmotionConsole(): JSX.Element {
 
   const cleanup = useCallback(async () => {
     window.clearInterval(pollIntervalRef.current);
+    window.clearInterval(photoIntervalRef.current);
     cancelAnimationFrame(audioRafRef.current ?? 0);
     cancelAnimationFrame(videoRafRef.current ?? 0);
     pollIntervalRef.current = undefined;
+    photoIntervalRef.current = undefined;
     audioRafRef.current = undefined;
     videoRafRef.current = undefined;
+    captureCanvasRef.current = null;
+    frameUploadInFlightRef.current = false;
 
     if (detectorRef.current) {
       try {
@@ -397,6 +405,60 @@ export default function EmotionConsole(): JSX.Element {
     return detector;
   }, []);
 
+  const captureAndSendFrame = useCallback(async () => {
+    if (!isRunningRef.current || frameUploadInFlightRef.current) {
+      return;
+    }
+
+    const video = videoRef.current;
+    if (!video || video.readyState < 2) {
+      return;
+    }
+
+    const width = video.videoWidth || video.clientWidth;
+    const height = video.videoHeight || video.clientHeight;
+    if (!width || !height) {
+      return;
+    }
+
+    const canvas = captureCanvasRef.current ?? document.createElement("canvas");
+    if (!captureCanvasRef.current) {
+      captureCanvasRef.current = canvas;
+    }
+
+    canvas.width = width;
+    canvas.height = height;
+
+    const context = canvas.getContext("2d");
+    if (!context) {
+      return;
+    }
+
+    context.drawImage(video, 0, 0, width, height);
+
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.75);
+    const base64 = dataUrl.split(",")[1];
+    if (!base64) {
+      return;
+    }
+
+    frameUploadInFlightRef.current = true;
+    try {
+      await fetch(`${API_BASE}/vision/frame`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          image_base64: base64,
+          captured_at: new Date().toISOString(),
+        }),
+      });
+    } catch (err) {
+      console.error("Failed to upload camera frame", err);
+    } finally {
+      frameUploadInFlightRef.current = false;
+    }
+  }, []);
+
   const sendAnalysis = useCallback(async () => {
     if (!isRunningRef.current) {
       return;
@@ -514,6 +576,11 @@ export default function EmotionConsole(): JSX.Element {
       processAudio();
       processVideo().catch(() => undefined);
 
+      photoIntervalRef.current = window.setInterval(() => {
+        captureAndSendFrame().catch(() => undefined);
+      }, 2000);
+
+      await captureAndSendFrame();
       pollIntervalRef.current = window.setInterval(() => {
         sendAnalysis().catch(() => undefined);
       }, 3000);
@@ -526,7 +593,14 @@ export default function EmotionConsole(): JSX.Element {
       await cleanup();
       setIsRunning(false);
     }
-  }, [cleanup, initializeDetector, processAudio, processVideo, sendAnalysis]);
+  }, [
+    captureAndSendFrame,
+    cleanup,
+    initializeDetector,
+    processAudio,
+    processVideo,
+    sendAnalysis,
+  ]);
 
   const stopSession = useCallback(async () => {
     if (!isRunningRef.current) {
@@ -666,11 +740,11 @@ export default function EmotionConsole(): JSX.Element {
                   Start capturing to compute RMS energy, pitch, tempo, and jitter.
                 </Text>
               )}
-            </div>
+          </div>
 
-            {analysis ? (
-              <div className="space-y-5 rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/40">
-                <div className="flex items-center justify-between">
+          {analysis ? (
+            <div className="space-y-5 rounded-2xl border border-slate-200 bg-white/80 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/40">
+              <div className="flex items-center justify-between">
                   <div>
                     <Heading as="h2" size="4" className="font-heading capitalize">
                       {analysis.dominant_emotion}
@@ -695,6 +769,8 @@ export default function EmotionConsole(): JSX.Element {
                 Aggregated predictions will appear here once the backend returns the first inference window.
               </div>
             )}
+
+            <RealtimeConversationPanel />
           </div>
         </section>
 

@@ -3,19 +3,29 @@ import binascii
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
+from pydantic import HttpUrl
 
 from app.api.dependencies import (
+    get_auth_client,
     get_audio_storage,
     get_emotion_analyzer,
     get_note_annotator,
+    get_payment_service,
     get_realtime_client,
     get_settings,
     get_tutor_service,
 )
 from app.core.config import Settings
+from app.schemas.auth import (
+    AuthCallbackRequest,
+    AuthLoginResponse,
+    AuthTokenResponse,
+    AuthUserInfoResponse,
+)
 from app.schemas.emotion import EmotionAnalysisRequest, EmotionAnalysisResponse
 from app.schemas.health import HealthResponse
+from app.schemas.payment import PaymentCheckoutRequest, PaymentCheckoutResponse
 from app.schemas.realtime import (
     RealtimeSessionToken,
     VisionFrameRequest,
@@ -23,8 +33,10 @@ from app.schemas.realtime import (
 )
 from app.schemas.note import NoteCreateRequest, NoteCreateResponse
 from app.schemas.tutor import TutorModeRequest, TutorModeResponse
+from app.services.auth import Auth0Client, Auth0ClientError
 from app.services.emotion import EmotionAnalyzer
 from app.services.note import NoteAnnotator, NoteAnnotationError
+from app.services.payment import StripePaymentError, StripePaymentService
 from app.services.realtime import RealtimeSessionClient, RealtimeSessionError
 from app.services.storage import S3AudioStorage, StorageServiceError
 from app.services.tutor import TutorModeService
@@ -40,6 +52,86 @@ async def health_check(settings: Settings = Depends(get_settings)) -> HealthResp
         status="ok",
         service=settings.project_name,
         environment=settings.environment,
+    )
+
+
+@router.get("/auth/login", response_model=AuthLoginResponse, tags=["auth"])
+async def auth_login(
+    redirect_uri: HttpUrl = Query(..., description="Redirect URI configured in Auth0"),
+    state: str | None = Query(None, description="Opaque state passed back after login"),
+    scope: str | None = Query(None, description="Optional override for OAuth scopes"),
+    audience: str | None = Query(None, description="Optional override for the API audience"),
+    auth_client: Auth0Client = Depends(get_auth_client),
+) -> AuthLoginResponse:
+    """Return the Auth0 hosted login page URL."""
+
+    url = auth_client.build_authorize_url(
+        redirect_uri=str(redirect_uri),
+        state=state,
+        scope=scope,
+        audience=audience,
+    )
+    return AuthLoginResponse(authorization_url=url)
+
+
+@router.post("/auth/callback", response_model=AuthTokenResponse, tags=["auth"])
+async def auth_callback(
+    payload: AuthCallbackRequest,
+    auth_client: Auth0Client = Depends(get_auth_client),
+) -> AuthTokenResponse:
+    """Exchange an Auth0 authorization code for access tokens."""
+
+    try:
+        tokens = await auth_client.exchange_code_for_tokens(
+            code=payload.code,
+            redirect_uri=str(payload.redirect_uri),
+        )
+    except Auth0ClientError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    return AuthTokenResponse(
+        access_token=tokens.access_token,
+        token_type=tokens.token_type,
+        expires_in=tokens.expires_in,
+        scope=tokens.scope,
+        id_token=tokens.id_token,
+        refresh_token=tokens.refresh_token,
+    )
+
+
+@router.get("/auth/user", response_model=AuthUserInfoResponse, tags=["auth"])
+async def auth_user_info(
+    authorization: str = Header(..., alias="Authorization"),
+    auth_client: Auth0Client = Depends(get_auth_client),
+) -> AuthUserInfoResponse:
+    """Return the authenticated user's profile by calling Auth0's userinfo endpoint."""
+
+    if not authorization.lower().startswith("bearer "):
+        raise HTTPException(
+            status_code=401, detail="Authorization header must contain a Bearer token"
+        )
+
+    token = authorization.split(" ", 1)[1].strip()
+    if not token:
+        raise HTTPException(status_code=401, detail="Bearer token is missing")
+
+    try:
+        profile = await auth_client.get_user_info(token)
+    except Auth0ClientError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    claims = {
+        key: value
+        for key, value in profile.raw.items()
+        if key not in {"sub", "email", "name", "picture"}
+    }
+
+    return AuthUserInfoResponse(
+        sub=profile.sub,
+        email=profile.email,
+        name=profile.name,
+        picture=profile.picture,
+        claims=claims,
     )
 
 
@@ -134,6 +226,27 @@ async def create_note(
         annotation=annotation.content,
         created_at=created_at,
     )
+
+
+@router.post("/payments/checkout", response_model=PaymentCheckoutResponse, tags=["payments"])
+async def create_checkout_session(
+    payload: PaymentCheckoutRequest,
+    payment_service: StripePaymentService = Depends(get_payment_service),
+) -> PaymentCheckoutResponse:
+    """Create a Stripe Checkout session for the client to complete payment."""
+
+    try:
+        session = payment_service.create_checkout_session(
+            success_url=str(payload.success_url),
+            cancel_url=str(payload.cancel_url),
+            price_id=payload.price_id,
+            quantity=payload.quantity,
+            customer_email=payload.customer_email,
+        )
+    except StripePaymentError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    return PaymentCheckoutResponse(session_id=session.session_id, checkout_url=session.url)
 
 
 @router.post("/tutor/mode", response_model=TutorModeResponse, tags=["tutor"])

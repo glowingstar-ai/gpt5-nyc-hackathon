@@ -29,6 +29,17 @@ class Settings(BaseSettings):
     )
     aws_region_name: str | None = Field(default=None, alias="AWS_REGION")
     aws_s3_bucket: str | None = Field(default=None, alias="AWS_S3_BUCKET")
+    auth0_domain: str | None = Field(default=None, alias="AUTH0_DOMAIN")
+    auth0_client_id: str | None = Field(default=None, alias="AUTH0_CLIENT_ID")
+    auth0_client_secret: str | None = Field(
+        default=None, alias="AUTH0_CLIENT_SECRET"
+    )
+    auth0_audience: str | None = Field(default=None, alias="AUTH0_AUDIENCE")
+    stripe_secret_key: str | None = Field(default=None, alias="STRIPE_SECRET_KEY")
+    stripe_default_price_id: str | None = Field(
+        default=None, alias="STRIPE_DEFAULT_PRICE_ID"
+    )
+    stripe_mode: str = Field(default="subscription", alias="STRIPE_MODE")
 
     model_config = {
         "env_file": ".env",

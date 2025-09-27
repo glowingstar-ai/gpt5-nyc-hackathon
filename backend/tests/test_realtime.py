@@ -74,6 +74,24 @@ def test_vision_frame_endpoint_accepts_valid_image() -> None:
         captured_at
     )
     assert "received_at" in payload
+    assert payload["source"] == "camera"
+
+
+def test_vision_frame_endpoint_accepts_ui_source() -> None:
+    """UI screenshots should be flagged with their source in the response."""
+
+    encoded = base64.b64encode(b"ui-image").decode("ascii")
+
+    with TestClient(app) as client:
+        response = client.post(
+            "/api/v1/vision/frame",
+            json={"image_base64": encoded, "captured_at": None, "source": "ui"},
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["bytes"] == len(b"ui-image")
+    assert payload["source"] == "ui"
 
 
 def test_vision_frame_endpoint_rejects_invalid_payload() -> None:

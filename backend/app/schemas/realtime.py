@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from datetime import datetime
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 
@@ -25,6 +27,10 @@ class VisionFrameRequest(BaseModel):
     captured_at: datetime | None = Field(
         default=None, description="Client timestamp when the frame was captured"
     )
+    source: Literal["camera", "ui"] = Field(
+        default="camera",
+        description="Originating surface for the submitted frame (camera or UI screenshot)",
+    )
 
 
 class VisionFrameResponse(BaseModel):
@@ -37,5 +43,8 @@ class VisionFrameResponse(BaseModel):
     )
     received_at: datetime = Field(
         description="Server timestamp when the frame was processed"
+    )
+    source: Literal["camera", "ui"] = Field(
+        description="Originating surface for the submitted frame (camera or UI screenshot)",
     )
 

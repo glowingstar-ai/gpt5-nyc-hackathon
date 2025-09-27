@@ -6,8 +6,6 @@ import {
   Sparkles,
   Radar,
   ArrowUpRight,
-  MessageCircle,
-  Brain,
   NotebookPen,
   Feather,
   Star,
@@ -45,24 +43,6 @@ const featureCards = [
     icon: Activity,
     accent: "from-amber-300 via-amber-200 to-amber-400",
     pill: "Live Analysis",
-  },
-  {
-    name: "Session Insights",
-    description:
-      "Review rich summaries, transcript intelligence, and top opportunities pulled from your captured sessions.",
-    href: "/session-insights",
-    icon: Brain,
-    accent: "from-violet-300 via-fuchsia-200 to-fuchsia-400",
-    pill: "AI Summaries",
-  },
-  {
-    name: "Agent Playbooks",
-    description:
-      "Operationalize best practices with collaborative playbooks, prompts, and workflows tuned to each customer moment.",
-    href: "/agent-playbooks",
-    icon: MessageCircle,
-    accent: "from-emerald-300 via-teal-200 to-teal-400",
-    pill: "Guided Actions",
   },
   {
     name: "Notes Workspace",
@@ -200,15 +180,6 @@ export default function LandingPage(): JSX.Element {
               className="border border-white/10 bg-white/5 text-slate-100 hover:border-amber-200/60 hover:bg-white/10 hover:text-amber-100"
             >
               <Link href="/emotion-console">Launch console</Link>
-            </Button>
-            <Button
-              className="bg-amber-300 text-slate-950 shadow-[0_0_32px_rgba(253,224,71,0.45)] transition hover:bg-amber-200"
-              asChild
-            >
-              <Link href="/session-insights" className="flex items-center gap-2">
-                Explore insights
-                <ArrowUpRight className="h-4 w-4" />
-              </Link>
             </Button>
           </div>
         </header>

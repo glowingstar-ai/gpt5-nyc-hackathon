@@ -186,9 +186,17 @@ A raw base64-encoded frame captured by the client is available for immediate mul
 Use this visual context to provide more relevant and helpful responses. You can reference what you see on their screen, help them with tasks they're working on, or answer questions about the content they're viewing. Be specific about what you observe and how you can assist them with their current activity."""
 
     try:
-        session = await client.create_ephemeral_session(
-            instructions=enhanced_instructions
+        # Create a new client with enhanced instructions
+        enhanced_client = RealtimeSessionClient(
+            api_key=client.api_key,
+            base_url=client.base_url,
+            model=client.model,
+            voice=client.voice,
+            instructions=enhanced_instructions or client.instructions,
+            timeout=client.timeout,
         )
+        
+        session = await enhanced_client.create_ephemeral_session()
     except RealtimeSessionError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 

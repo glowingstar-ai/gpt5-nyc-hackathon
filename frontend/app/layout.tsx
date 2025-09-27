@@ -7,11 +7,15 @@ import { inter, manrope, plexSans } from "@/lib/fonts";
 
 export const metadata: Metadata = {
   title: {
-    default: "EmpathIQ Experience Studio",
-    template: "%s | EmpathIQ Studio",
+    default: "GlowingStar Experience Studio",
+    template: "%s | GlowingStar Studio",
   },
   description:
     "Command center for emotionally intelligent customer experiences—monitor sessions, review insights, and launch guided playbooks.",
+  icons: {
+    icon: "/glowingstar-logo.png",
+    shortcut: "/glowingstar-logo.png",
+  },
 };
 
 export default function RootLayout({

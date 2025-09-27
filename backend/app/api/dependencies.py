@@ -9,6 +9,7 @@ from app.services.journal import JournalCoach
 from app.services.note import NoteAnnotator
 from app.services.payment import StripePaymentService
 from app.services.realtime import RealtimeSessionClient
+from app.services.research import ResearchDiscoveryService
 from app.services.storage import S3AudioStorage, StorageServiceError
 from app.services.tutor import TutorModeService
 
@@ -89,6 +90,35 @@ def get_journal_coach() -> JournalCoach:
         base_url=settings.openai_api_base_url,
         model=settings.openai_annotation_model,
     )
+
+
+@lru_cache
+def _get_research_service() -> ResearchDiscoveryService:
+    settings = _get_settings()
+    if not settings.openai_api_key:
+        raise ValueError("OpenAI API key is not configured for research discovery")
+    if not settings.cohere_api_key:
+        raise ValueError("Cohere API key is not configured for research discovery")
+
+    return ResearchDiscoveryService(
+        openai_api_key=settings.openai_api_key,
+        openai_base_url=settings.openai_api_base_url,
+        openai_model=settings.openai_research_model,
+        cohere_api_key=settings.cohere_api_key,
+        cohere_base_url=settings.cohere_api_base_url,
+        cohere_model=settings.cohere_rerank_model,
+        arxiv_api_url=settings.arxiv_api_base_url,
+        arxiv_max_results=settings.arxiv_max_results,
+    )
+
+
+def get_research_service() -> ResearchDiscoveryService:
+    """FastAPI dependency that provides the research discovery orchestrator."""
+
+    try:
+        return _get_research_service()
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @lru_cache

@@ -1,11 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Theme, Heading, Text } from "@radix-ui/themes";
 import "@radix-ui/themes/styles.css";
 
 import { Button } from "@/components/ui/button";
-import RealtimeConversationPanel from "@/components/realtime-conversation";
 
 type EmotionProbabilities = Record<string, number>;
 
@@ -770,7 +770,18 @@ export default function EmotionConsole(): JSX.Element {
               </div>
             )}
 
-            <RealtimeConversationPanel onShareVisionFrame={captureAndSendFrame} />
+            <div className="space-y-4 rounded-2xl border border-slate-200 bg-white/70 p-4 shadow-sm dark:border-slate-800 dark:bg-slate-900/40">
+              <Heading as="h2" size="4" className="font-heading">
+                Looking for the realtime assistant?
+              </Heading>
+              <Text className="text-sm text-slate-500 dark:text-slate-400">
+                The live conversation workspace has moved to a dedicated route where you can
+                share UI screenshots with the assistant for richer context.
+              </Text>
+              <Button asChild className="w-full sm:w-auto">
+                <Link href="/realtime-assistant">Open realtime assistant</Link>
+              </Button>
+            </div>
           </div>
         </section>
 

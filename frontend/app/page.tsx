@@ -410,13 +410,13 @@ export default function LandingPage(): JSX.Element {
                 Always-on signal clarity
               </div>
               <p className="text-lg font-semibold text-slate-50">
-                &ldquo;GlowingStar.AI translates every subtle shift into
-                intuitive visuals. Our agents finally feel supported in the
-                moment.&rdquo;
+                &ldquo;Every learner is a glowing star. Our job is to help them
+                shine—by noticing when they're stuck, encouraging them when
+                they're close, and challenging them when they're ready.&rdquo;
               </p>
               <div className="space-y-1 text-sm text-slate-400">
-                <p>Jordan Michaels</p>
-                <p>Director of Experience Design, Aurora CX</p>
+                <p>Chenyu Zhang</p>
+                <p>Founder and CEO, GlowingStar.AI</p>
               </div>
             </div>
           </section>

@@ -5,7 +5,8 @@ import { useCallback, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import WorkspaceBanner from "@/components/workspace-banner";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
 type NoteResponse = {
   note_id: string;
@@ -22,7 +23,13 @@ type NoteStreamEvent =
   | { type: "status"; stage: string; message: string }
   | { type: "transcript"; stage: string; text: string }
   | { type: "annotation_delta"; stage: string; delta: string }
-  | { type: "note_saved"; stage: string; note: NoteResponse; transcript?: string | null }
+  | { type: "reasoning_delta"; stage: string; delta: string }
+  | {
+      type: "note_saved";
+      stage: string;
+      note: NoteResponse;
+      transcript?: string | null;
+    }
   | { type: "complete"; stage: string; message: string }
   | { type: "error"; stage: string; message: string };
 
@@ -40,6 +47,7 @@ export default function NotesPage(): JSX.Element {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [annotation, setAnnotation] = useState<string | null>(null);
+  const [reasoning, setReasoning] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -54,7 +62,9 @@ export default function NotesPage(): JSX.Element {
   const chunksRef = useRef<BlobPart[]>([]);
 
   const isReadyToSubmit = useMemo(() => {
-    return title.trim().length > 0 && content.trim().length > 0 && !isSubmitting;
+    return (
+      title.trim().length > 0 && content.trim().length > 0 && !isSubmitting
+    );
   }, [title, content, isSubmitting]);
 
   const startRecording = useCallback(async () => {
@@ -78,7 +88,9 @@ export default function NotesPage(): JSX.Element {
 
       mediaRecorder.onstop = async () => {
         setRecordingState("processing");
-        const blob = new Blob(chunksRef.current, { type: mediaRecorder.mimeType });
+        const blob = new Blob(chunksRef.current, {
+          type: mediaRecorder.mimeType,
+        });
         chunksRef.current = [];
         setAudioMimeType(mediaRecorder.mimeType);
         const base64 = await blobToBase64(blob);
@@ -93,7 +105,9 @@ export default function NotesPage(): JSX.Element {
       setRecordingState("recording");
     } catch (err) {
       console.error(err);
-      setError("Unable to access the microphone. Please grant permission and try again.");
+      setError(
+        "Unable to access the microphone. Please grant permission and try again."
+      );
       setRecordingState("idle");
     }
   }, [audioPreviewUrl, recordingState]);
@@ -138,12 +152,16 @@ export default function NotesPage(): JSX.Element {
         });
 
         if (!response.body) {
-          throw new Error("Streaming is not supported by the backend response.");
+          throw new Error(
+            "Streaming is not supported by the backend response."
+          );
         }
 
         if (!response.ok) {
           const message = await response.text().catch(() => null);
-          throw new Error(message || `Failed to save note (${response.status})`);
+          throw new Error(
+            message || `Failed to save note (${response.status})`
+          );
         }
 
         const reader = response.body.getReader();
@@ -152,6 +170,7 @@ export default function NotesPage(): JSX.Element {
         let shouldAbort = false;
 
         setAnnotation("");
+        setReasoning("");
 
         while (!shouldAbort) {
           const { value, done } = await reader.read();
@@ -169,6 +188,8 @@ export default function NotesPage(): JSX.Element {
                   setStatusMessages((prev) => [...prev, event.message]);
                 } else if (event.type === "transcript") {
                   setTranscript(event.text);
+                } else if (event.type === "reasoning_delta") {
+                  setReasoning((prev) => (prev ?? "") + event.delta);
                 } else if (event.type === "annotation_delta") {
                   setAnnotation((prev) => (prev ?? "") + event.delta);
                 } else if (event.type === "note_saved") {
@@ -186,7 +207,11 @@ export default function NotesPage(): JSX.Element {
                   break;
                 }
               } catch (parseError) {
-                console.error("Failed to parse stream chunk", parseError, chunk);
+                console.error(
+                  "Failed to parse stream chunk",
+                  parseError,
+                  chunk
+                );
               }
             }
             newlineIndex = buffer.indexOf("\n");
@@ -211,7 +236,11 @@ export default function NotesPage(): JSX.Element {
                 setError(event.message);
               }
             } catch (parseError) {
-              console.error("Failed to parse trailing stream chunk", parseError, trailing);
+              console.error(
+                "Failed to parse trailing stream chunk",
+                parseError,
+                trailing
+              );
             }
           }
         } else {
@@ -243,12 +272,16 @@ export default function NotesPage(): JSX.Element {
         <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-6 shadow-lg">
           <h2 className="text-lg font-semibold">Capture your thoughts</h2>
           <p className="mt-1 text-sm text-slate-400">
-            Draft notes, add a supporting voice memo, and let GPT-5 organize the takeaways for you.
+            Draft your notes and let GPT-5 polish them into well-structured,
+            professional content.
           </p>
 
           <form className="mt-6 space-y-6" onSubmit={handleSubmit}>
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-200" htmlFor="title">
+              <label
+                className="text-sm font-medium text-slate-200"
+                htmlFor="title"
+              >
                 Note title
               </label>
               <input
@@ -264,7 +297,10 @@ export default function NotesPage(): JSX.Element {
             </div>
 
             <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-200" htmlFor="content">
+              <label
+                className="text-sm font-medium text-slate-200"
+                htmlFor="content"
+              >
                 Notes
               </label>
               <textarea
@@ -282,7 +318,9 @@ export default function NotesPage(): JSX.Element {
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="text-sm font-medium text-slate-200">Voice memo</h3>
+                  <h3 className="text-sm font-medium text-slate-200">
+                    Voice memo
+                  </h3>
                   <p className="text-xs text-slate-400">
                     Start a quick recording to give GPT-5 richer context.
                   </p>
@@ -309,7 +347,9 @@ export default function NotesPage(): JSX.Element {
 
               <div className="rounded-md border border-dashed border-slate-700 bg-slate-950/50 p-4 text-sm">
                 {recordingState === "recording" && (
-                  <p className="text-amber-400">Recording in progress... speak freely!</p>
+                  <p className="text-amber-400">
+                    Recording in progress... speak freely!
+                  </p>
                 )}
                 {recordingState === "processing" && (
                   <p className="text-indigo-400">Processing audio…</p>
@@ -321,7 +361,8 @@ export default function NotesPage(): JSX.Element {
                   <div className="space-y-2">
                     <audio controls src={audioPreviewUrl} className="w-full" />
                     <p className="text-xs text-slate-500">
-                      Audio will be stored securely in your configured AWS S3 bucket.
+                      Audio will be stored securely in your configured AWS S3
+                      bucket.
                     </p>
                   </div>
                 )}
@@ -336,12 +377,12 @@ export default function NotesPage(): JSX.Element {
                     {statusMessages[statusMessages.length - 1]}
                   </span>
                 )}
-                {!error && !isSubmitting && annotation && (
-                  <span className="ml-3 text-emerald-400">Annotation ready!</span>
+                {!error && !isSubmitting && noteMetadata && (
+                  <span className="ml-3 text-emerald-400">Notes polished!</span>
                 )}
               </div>
               <Button type="submit" disabled={!isReadyToSubmit}>
-                {isSubmitting ? "Generating annotation…" : "Save note & annotate"}
+                {isSubmitting ? "Polishing notes…" : "Save & polish notes"}
               </Button>
             </div>
           </form>
@@ -356,15 +397,41 @@ export default function NotesPage(): JSX.Element {
           </section>
         )}
 
-        {annotation && (
+        {reasoning && (
           <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-6 shadow-lg">
-            <h2 className="text-lg font-semibold">GPT-5 annotation</h2>
+            <h2 className="text-lg font-semibold">GPT-5 Reasoning</h2>
+            <div className="mt-3 rounded border border-slate-700 bg-slate-800/50 p-4">
+              <p className="whitespace-pre-line text-sm leading-6 text-slate-300">
+                {reasoning}
+              </p>
+            </div>
+          </section>
+        )}
+
+        {noteMetadata && (
+          <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-6 shadow-lg">
+            <h2 className="text-lg font-semibold">Polished Notes</h2>
             <p className="mt-3 whitespace-pre-line text-sm leading-6 text-slate-200">
-              {annotation}
+              {noteMetadata.content}
             </p>
-            {noteMetadata?.note_id && (
+            {noteMetadata.annotation && (
+              <details className="mt-6">
+                <summary className="cursor-pointer text-sm font-medium text-slate-400 hover:text-slate-300">
+                  View Original Notes
+                </summary>
+                <div className="mt-3 rounded border border-slate-700 bg-slate-800/50 p-4">
+                  <p className="whitespace-pre-line text-sm leading-6 text-slate-300">
+                    {noteMetadata.annotation}
+                  </p>
+                </div>
+              </details>
+            )}
+            {noteMetadata.note_id && (
               <p className="mt-4 text-xs text-slate-500">
-                Saved note ID: <span className="font-mono text-slate-300">{noteMetadata.note_id}</span>
+                Saved note ID:{" "}
+                <span className="font-mono text-slate-300">
+                  {noteMetadata.note_id}
+                </span>
               </p>
             )}
           </section>
@@ -373,4 +440,3 @@ export default function NotesPage(): JSX.Element {
     </div>
   );
 }
-

@@ -221,11 +221,13 @@ export default function LandingPage(): JSX.Element {
                 Meet Glowy, your luminous copilot
               </span>
               <h1 className="text-4xl font-semibold leading-tight text-slate-50 sm:text-5xl lg:text-6xl">
-                A Glowing Star turns every touchpoint into a guided, glowing experience.
+                A Glowing Star turns every touchpoint into a guided, glowing
+                experience.
               </h1>
               <p className="max-w-xl text-lg text-slate-200">
-                Glowy orchestrates warmth and intelligence, weaving adaptive AI insights into modern journeys so every
-                exchange feels personal, precise, and full of wonder.
+                Glowy orchestrates warmth and intelligence, weaving adaptive AI
+                insights into modern journeys so every exchange feels personal,
+                precise, and full of wonder.
               </p>
               <div className="flex flex-wrap gap-4">
                 <Button
@@ -233,7 +235,10 @@ export default function LandingPage(): JSX.Element {
                   asChild
                   className="bg-amber-300 text-slate-950 shadow-[0_0_32px_rgba(253,224,71,0.45)] hover:bg-amber-200"
                 >
-                  <Link href="/emotion-console" className="flex items-center gap-2">
+                  <Link
+                    href="/emotion-console"
+                    className="flex items-center gap-2"
+                  >
                     Start live session
                     <ArrowUpRight className="h-4 w-4" />
                   </Link>
@@ -256,8 +261,12 @@ export default function LandingPage(): JSX.Element {
                     key={stat.label}
                     className="min-w-[120px] rounded-2xl border border-white/10 bg-white/5 px-4 py-3 shadow-inner shadow-amber-200/10"
                   >
-                    <p className="text-2xl font-semibold text-amber-200">{stat.value}</p>
-                    <p className="text-xs uppercase tracking-[0.25em] text-slate-400">{stat.label}</p>
+                    <p className="text-2xl font-semibold text-amber-200">
+                      {stat.value}
+                    </p>
+                    <p className="text-xs uppercase tracking-[0.25em] text-slate-400">
+                      {stat.label}
+                    </p>
                   </div>
                 ))}
               </div>
@@ -287,7 +296,9 @@ export default function LandingPage(): JSX.Element {
                       className="relative mx-auto h-32 w-32 drop-shadow-[0_0_45px_rgba(253,224,71,0.45)]"
                     />
                     <p className="text-center text-sm text-amber-50">
-                      &ldquo;Glowy here—sentiment is shining at 92%. I’ve highlighted two moments to celebrate with your team.&rdquo;
+                      &ldquo;Glowy here—sentiment is shining at 92%. I’ve
+                      highlighted two moments to celebrate with your
+                      team.&rdquo;
                     </p>
                   </div>
                   <div className="grid gap-3 sm:grid-cols-3">
@@ -296,8 +307,12 @@ export default function LandingPage(): JSX.Element {
                         key={item.title}
                         className="rounded-2xl border border-white/10 bg-slate-900/60 p-4 text-sm text-slate-300"
                       >
-                        <p className="font-semibold text-amber-100">{item.title}</p>
-                        <p className="mt-2 text-xs text-slate-400">{item.description}</p>
+                        <p className="font-semibold text-amber-100">
+                          {item.title}
+                        </p>
+                        <p className="mt-2 text-xs text-slate-400">
+                          {item.description}
+                        </p>
                       </div>
                     ))}
                   </div>
@@ -309,17 +324,23 @@ export default function LandingPage(): JSX.Element {
           <section id="features" className="space-y-8">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <p className="text-sm uppercase tracking-[0.35em] text-amber-200/80">Navigation</p>
+                <p className="text-sm uppercase tracking-[0.35em] text-amber-200/80">
+                  Navigation
+                </p>
                 <h2 className="mt-2 text-3xl font-semibold text-slate-50">
                   Choose your next constellation
                 </h2>
               </div>
               <p className="max-w-md text-sm text-slate-400">
-                Each workspace is crafted to highlight the nuance of emotional intelligence—pick the module that matches
-                the moment and follow the glow.
+                Each workspace is crafted to highlight the nuance of emotional
+                intelligence—pick the module that matches the moment and follow
+                the glow.
               </p>
             </div>
-            <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3" id="experiences">
+            <div
+              className="grid gap-6 md:grid-cols-2 xl:grid-cols-3"
+              id="experiences"
+            >
               {featureCards.map((feature) => (
                 <Link key={feature.name} href={feature.href} className="group">
                   <div className="h-full rounded-3xl border border-white/10 bg-slate-950/60 p-6 shadow-lg shadow-amber-200/5 transition-transform duration-300 group-hover:-translate-y-1 group-hover:shadow-amber-300/30">
@@ -331,8 +352,12 @@ export default function LandingPage(): JSX.Element {
                     <div className="mt-6 inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900/70 text-amber-200">
                       <feature.icon className="h-6 w-6" />
                     </div>
-                    <h3 className="mt-6 text-2xl font-semibold text-slate-50">{feature.name}</h3>
-                    <p className="mt-3 text-sm leading-relaxed text-slate-300">{feature.description}</p>
+                    <h3 className="mt-6 text-2xl font-semibold text-slate-50">
+                      {feature.name}
+                    </h3>
+                    <p className="mt-3 text-sm leading-relaxed text-slate-300">
+                      {feature.description}
+                    </p>
                     <div className="mt-6 inline-flex items-center gap-2 text-sm font-medium text-amber-100">
                       Enter experience
                       <ArrowUpRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
@@ -348,22 +373,33 @@ export default function LandingPage(): JSX.Element {
             className="grid gap-10 rounded-3xl border border-white/10 bg-gradient-to-br from-slate-950 via-slate-900/80 to-slate-950 p-8 md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:p-12"
           >
             <div className="space-y-6">
-              <p className="text-sm uppercase tracking-[0.4em] text-amber-200/80">Why teams choose A Glowing Star</p>
+              <p className="text-sm uppercase tracking-[0.4em] text-amber-200/80">
+                Why teams choose A Glowing Star
+              </p>
               <h2 className="text-3xl font-semibold text-slate-50">
-                Purpose-built for leaders who choreograph luminous customer journeys.
+                Purpose-built for leaders who choreograph luminous customer
+                journeys.
               </h2>
               <p className="text-sm leading-relaxed text-slate-300">
-                We combine advanced signal processing with playful, human-centered design so your team can see, feel, and
-                respond to every emotional beat.
+                We combine advanced signal processing with playful,
+                human-centered design so your team can see, feel, and respond to
+                every emotional beat.
               </p>
               <div className="grid gap-4 sm:grid-cols-3">
                 {glowTiles.map((tile) => (
-                  <div key={tile.title} className="rounded-2xl border border-white/10 bg-slate-950/60 p-5">
+                  <div
+                    key={tile.title}
+                    className="rounded-2xl border border-white/10 bg-slate-950/60 p-5"
+                  >
                     <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-amber-200/20 text-amber-100">
                       <tile.icon className="h-5 w-5" />
                     </div>
-                    <p className="mt-3 text-base font-semibold text-slate-50">{tile.title}</p>
-                    <p className="mt-2 text-xs text-slate-400">{tile.description}</p>
+                    <p className="mt-3 text-base font-semibold text-slate-50">
+                      {tile.title}
+                    </p>
+                    <p className="mt-2 text-xs text-slate-400">
+                      {tile.description}
+                    </p>
                   </div>
                 ))}
               </div>
@@ -374,8 +410,9 @@ export default function LandingPage(): JSX.Element {
                 Always-on signal clarity
               </div>
               <p className="text-lg font-semibold text-slate-50">
-                &ldquo;GlowingStar.AI translates every subtle shift into intuitive visuals. Our agents finally feel supported in
-                the moment.&rdquo;
+                &ldquo;GlowingStar.AI translates every subtle shift into
+                intuitive visuals. Our agents finally feel supported in the
+                moment.&rdquo;
               </p>
               <div className="space-y-1 text-sm text-slate-400">
                 <p>Jordan Michaels</p>
@@ -386,9 +423,7 @@ export default function LandingPage(): JSX.Element {
         </main>
 
         <footer className="mt-16 flex flex-col items-center gap-4 border-t border-white/10 pt-8 text-center text-xs text-slate-400">
-          <p>
-            Built with care for the GPT-5 NYC Hackathon. Inspired by the potential of emotionally intelligent AI.
-          </p>
+          <p>Building motionally intelligent AI.</p>
           <div className="flex items-center gap-4 text-[0.7rem] uppercase tracking-[0.4em] text-slate-500">
             <span>Privacy-first</span>
             <span>Inclusive design</span>

@@ -66,6 +66,7 @@ function SidePanel() {
     "Idle — start a conversation to speak with GPT-5."
   )
   const [error, setError] = useState<string | null>(null)
+  const [showMicrophoneHelp, setShowMicrophoneHelp] = useState(false)
   const [isConnecting, setIsConnecting] = useState(false)
   const [isActive, setIsActive] = useState(false)
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([])
@@ -94,12 +95,13 @@ function SidePanel() {
     chrome.storage?.local?.set({ apiBaseUrl: sanitized })
   }, [])
 
-  const resetConnection = useCallback((message?: string) => {
-    dataChannelRef.current?.close()
-    dataChannelRef.current = null
+  const resetConnection = useCallback(
+    (message?: string, options?: { preserveMicHelp?: boolean }) => {
+      dataChannelRef.current?.close()
+      dataChannelRef.current = null
 
-    const pc = peerConnectionRef.current
-    peerConnectionRef.current = null
+      const pc = peerConnectionRef.current
+      peerConnectionRef.current = null
     if (pc) {
       pc.onicecandidate = null
       pc.ontrack = null
@@ -115,15 +117,20 @@ function SidePanel() {
       audioRef.current.srcObject = null
     }
 
-    pendingResponsesRef.current.clear()
-    setIsConnecting(false)
-    setIsActive(false)
-    if (message) {
-      setStatus(message)
-    } else {
-      setStatus("Call ended. Start a new conversation when ready.")
-    }
-  }, [])
+      pendingResponsesRef.current.clear()
+      setIsConnecting(false)
+      setIsActive(false)
+      if (!options?.preserveMicHelp) {
+        setShowMicrophoneHelp(false)
+      }
+      if (message) {
+        setStatus(message)
+      } else {
+        setStatus("Call ended. Start a new conversation when ready.")
+      }
+    },
+    []
+  )
 
   const appendAssistantDelta = useCallback(
     (responseId: string, delta: string) => {
@@ -219,6 +226,7 @@ function SidePanel() {
 
     setIsConnecting(true)
     setError(null)
+    setShowMicrophoneHelp(false)
     setStatus("Requesting realtime session…")
     setTranscript([])
     pendingResponsesRef.current.clear()
@@ -289,14 +297,81 @@ function SidePanel() {
         }
       })
 
+      const ensureMicrophonePermission = async () => {
+        if (chrome?.permissions?.contains) {
+          const alreadyGranted = await new Promise<boolean>((resolve) => {
+            chrome.permissions.contains(
+              { permissions: ["audioCapture"] },
+              (granted) => {
+                const lastError = chrome.runtime?.lastError
+                if (lastError) {
+                  console.warn("Unable to verify microphone permission", lastError)
+                  resolve(false)
+                  return
+                }
+                resolve(Boolean(granted))
+              }
+            )
+          })
+          if (alreadyGranted) {
+            return true
+          }
+        }
+
+        if (chrome?.permissions?.request) {
+          const granted = await new Promise<boolean>((resolve) => {
+            chrome.permissions.request(
+              { permissions: ["audioCapture"] },
+              (wasGranted) => {
+                const lastError = chrome.runtime?.lastError
+                if (lastError) {
+                  console.warn("Unable to request microphone permission", lastError)
+                  resolve(false)
+                  return
+                }
+                resolve(Boolean(wasGranted))
+              }
+            )
+          })
+          if (!granted) {
+            return false
+          }
+        }
+
+        if (navigator?.permissions?.query) {
+          try {
+            const status = await navigator.permissions.query({
+              // eslint-disable-next-line @typescript-eslint/consistent-type-assertions
+              name: "microphone" as PermissionName
+            })
+            if (status.state === "denied") {
+              return false
+            }
+          } catch (permError) {
+            console.warn("Unable to query microphone permission", permError)
+          }
+        }
+
+        return true
+      }
+
+      const hasPermission = await ensureMicrophonePermission()
+      if (!hasPermission) {
+        setShowMicrophoneHelp(true)
+        throw new Error(
+          "Microphone permission denied. Use the button below to open Chrome's microphone settings and allow access for this extension."
+        )
+      }
+
       const localStream = await navigator.mediaDevices
         .getUserMedia({
           audio: true
         })
         .catch((err) => {
           if (err.name === "NotAllowedError") {
+            setShowMicrophoneHelp(true)
             throw new Error(
-              "Microphone permission denied. Please allow microphone access in your browser settings."
+              "Microphone permission denied. Use the button below to open Chrome's microphone settings and allow access for this extension."
             )
           } else if (err.name === "NotFoundError") {
             throw new Error(
@@ -335,7 +410,13 @@ function SidePanel() {
       console.error("Unable to start realtime conversation", err)
       if (err instanceof Error) {
         setError(err.message)
-        resetConnection("Unable to establish realtime session.")
+        const preserveMicHelp = err.message.includes("Microphone permission denied")
+        if (preserveMicHelp) {
+          setShowMicrophoneHelp(true)
+        }
+        resetConnection("Unable to establish realtime session.", {
+          preserveMicHelp
+        })
       } else {
         setError("Unknown error while connecting to realtime session.")
         resetConnection()
@@ -372,6 +453,16 @@ function SidePanel() {
     channel.send(JSON.stringify({ type: "response.create" }))
     setInputValue("")
   }, [inputValue])
+
+  const openMicrophoneSettings = useCallback(() => {
+    try {
+      if (chrome?.tabs?.create) {
+        chrome.tabs.create({ url: "chrome://settings/content/microphone" })
+      }
+    } catch (err) {
+      console.error("Unable to open microphone settings", err)
+    }
+  }, [])
 
   return (
     <div
@@ -414,6 +505,25 @@ function SidePanel() {
         <div style={{ fontSize: "14px", lineHeight: 1.5 }}>{status}</div>
         {error ? (
           <div style={{ color: "#fca5a5", fontSize: "13px" }}>{error}</div>
+        ) : null}
+        {showMicrophoneHelp ? (
+          <button
+            type="button"
+            onClick={openMicrophoneSettings}
+            style={{
+              alignSelf: "flex-start",
+              background: "rgba(59,130,246,0.2)",
+              border: "1px solid rgba(59,130,246,0.6)",
+              borderRadius: "8px",
+              color: "#bfdbfe",
+              cursor: "pointer",
+              fontSize: "13px",
+              fontWeight: 600,
+              padding: "8px 12px"
+            }}
+          >
+            Open microphone settings
+          </button>
         ) : null}
 
         <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>

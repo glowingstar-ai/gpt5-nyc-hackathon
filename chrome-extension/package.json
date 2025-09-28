@@ -39,6 +39,9 @@
       "tabs",
       "microphone"
     ],
+    "optional_permissions": [
+      "audioCapture"
+    ],
     "host_permissions": [
       "<all_urls>"
     ]

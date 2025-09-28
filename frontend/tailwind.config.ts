@@ -20,6 +20,27 @@ const config: Config = {
           DEFAULT: "#0F172A",
           foreground: "#F8FAFC"
         }
+      },
+      keyframes: {
+        starTwinkle: {
+          "0%, 100%": { transform: "scale(1) rotate(0deg)" },
+          "35%": { transform: "scale(1.08) rotate(-4deg)" },
+          "65%": { transform: "scale(1.08) rotate(3deg)" }
+        },
+        starHalo: {
+          "0%, 100%": { transform: "scale(0.9)", opacity: "0.3" },
+          "50%": { transform: "scale(1.08)", opacity: "0.6" }
+        },
+        starBurst: {
+          "0%": { transform: "scale(0.6)", opacity: "0" },
+          "60%": { transform: "scale(1.15)", opacity: "0.35" },
+          "100%": { transform: "scale(1.4)", opacity: "0" }
+        }
+      },
+      animation: {
+        starTwinkle: "starTwinkle 2.8s ease-in-out infinite",
+        starHalo: "starHalo 3.6s ease-in-out infinite",
+        starBurst: "starBurst 0.9s ease-out forwards"
       }
     }
   },

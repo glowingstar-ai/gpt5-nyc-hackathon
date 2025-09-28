@@ -269,7 +269,20 @@ export default function LandingPage(): JSX.Element {
                 <div className="relative flex flex-col gap-6">
                   <div className="flex items-center justify-between text-sm text-slate-300">
                     <span className="inline-flex items-center gap-2">
-                      <Star className="h-4 w-4 text-amber-200" />
+                      <span className="group/star relative inline-flex h-7 w-7 items-center justify-center">
+                        <span
+                          className="absolute inset-0 -z-10 rounded-full bg-amber-200/20 opacity-70 blur-md transition duration-500 group-hover/star:scale-125 group-hover/star:opacity-100 motion-safe:animate-starHalo motion-reduce:animate-none"
+                          aria-hidden
+                        />
+                        <span
+                          className="absolute inset-0 -z-20 rounded-full border border-amber-200/60 opacity-0 group-hover/star:animate-starBurst motion-reduce:group-hover/star:animate-none"
+                          aria-hidden
+                        />
+                        <Star
+                          className="h-4 w-4 text-amber-200 drop-shadow-[0_0_8px_rgba(253,224,71,0.65)] transition-transform duration-500 group-hover/star:rotate-12 group-hover/star:scale-110 motion-safe:animate-starTwinkle motion-reduce:animate-none motion-reduce:transition-none"
+                          aria-hidden
+                        />
+                      </span>
                       Glow dashboard
                     </span>
                     <span className="inline-flex items-center gap-2 text-amber-100">

@@ -94,10 +94,42 @@ export default function GenerativeUIPage(): JSX.Element {
       });
 
       if (!response.ok) {
-        throw new Error("The generative UI service is unavailable right now.");
+        let detail = "The generative UI service is unavailable right now.";
+        try {
+          const errorBody = await response.json();
+          const extracted =
+            typeof errorBody?.detail === "string"
+              ? errorBody.detail
+              : typeof errorBody?.message === "string"
+                ? errorBody.message
+                : null;
+          if (extracted) {
+            detail = extracted;
+          }
+        } catch (parseError) {
+          console.warn("Failed to parse error response", parseError);
+        }
+
+        setError(detail);
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: detail,
+          },
+        ]);
+        return;
       }
 
-      const data = await response.json();
+      const data = (await response.json()) as {
+        message?: string;
+        suggested_theme?: {
+          primary_color?: string;
+          accent_color?: string;
+          background_color?: string;
+          text_color?: string;
+        };
+      };
       const assistantMessage: ChatMessage = {
         role: "assistant",
         content:
@@ -127,17 +159,16 @@ export default function GenerativeUIPage(): JSX.Element {
       }
     } catch (err) {
       console.error(err);
-      setError(
+      const fallbackMessage =
         err instanceof Error
           ? err.message
-          : "Something went wrong while contacting GPT-5."
-      );
+          : "Something went wrong while contacting GPT-5.";
+      setError(fallbackMessage);
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
-          content:
-            "I hit a snag talking to the model. Give it another go in a moment?",
+          content: fallbackMessage,
         },
       ]);
     } finally {

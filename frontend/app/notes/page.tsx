@@ -18,6 +18,14 @@ type NoteResponse = {
 
 type RecordingState = "idle" | "recording" | "processing";
 
+type NoteStreamEvent =
+  | { type: "status"; stage: string; message: string }
+  | { type: "transcript"; stage: string; text: string }
+  | { type: "annotation_delta"; stage: string; delta: string }
+  | { type: "note_saved"; stage: string; note: NoteResponse; transcript?: string | null }
+  | { type: "complete"; stage: string; message: string }
+  | { type: "error"; stage: string; message: string };
+
 const blobToBase64 = async (blob: Blob): Promise<string> => {
   const arrayBuffer = await blob.arrayBuffer();
   const bytes = new Uint8Array(arrayBuffer);
@@ -32,12 +40,15 @@ export default function NotesPage(): JSX.Element {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [annotation, setAnnotation] = useState<string | null>(null);
+  const [transcript, setTranscript] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [recordingState, setRecordingState] = useState<RecordingState>("idle");
   const [audioPreviewUrl, setAudioPreviewUrl] = useState<string | null>(null);
   const [audioBase64, setAudioBase64] = useState<string | null>(null);
   const [audioMimeType, setAudioMimeType] = useState<string | null>(null);
+  const [statusMessages, setStatusMessages] = useState<string[]>([]);
+  const [noteMetadata, setNoteMetadata] = useState<NoteResponse | null>(null);
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
@@ -102,6 +113,9 @@ export default function NotesPage(): JSX.Element {
       setIsSubmitting(true);
       setError(null);
       setAnnotation(null);
+      setTranscript(null);
+      setStatusMessages([]);
+      setNoteMetadata(null);
 
       try {
         const payload: Record<string, unknown> = {
@@ -115,7 +129,7 @@ export default function NotesPage(): JSX.Element {
           payload["audio_mime_type"] = audioMimeType;
         }
 
-        const response = await fetch(`${API_BASE}/notes`, {
+        const response = await fetch(`${API_BASE}/notes/annotate`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
@@ -123,13 +137,90 @@ export default function NotesPage(): JSX.Element {
           body: JSON.stringify(payload),
         });
 
-        if (!response.ok) {
-          const message = await response.text();
-          throw new Error(message || "Failed to save note");
+        if (!response.body) {
+          throw new Error("Streaming is not supported by the backend response.");
         }
 
-        const data: NoteResponse = await response.json();
-        setAnnotation(data.annotation);
+        if (!response.ok) {
+          const message = await response.text().catch(() => null);
+          throw new Error(message || `Failed to save note (${response.status})`);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let shouldAbort = false;
+
+        setAnnotation("");
+
+        while (!shouldAbort) {
+          const { value, done } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          let newlineIndex = buffer.indexOf("\n");
+          while (newlineIndex !== -1) {
+            const chunk = buffer.slice(0, newlineIndex).trim();
+            buffer = buffer.slice(newlineIndex + 1);
+            if (chunk) {
+              try {
+                const event = JSON.parse(chunk) as NoteStreamEvent;
+                if (event.type === "status") {
+                  setStatusMessages((prev) => [...prev, event.message]);
+                } else if (event.type === "transcript") {
+                  setTranscript(event.text);
+                } else if (event.type === "annotation_delta") {
+                  setAnnotation((prev) => (prev ?? "") + event.delta);
+                } else if (event.type === "note_saved") {
+                  setNoteMetadata(event.note);
+                  if (event.transcript) {
+                    setTranscript(event.transcript);
+                  }
+                  setAnnotation(event.note.annotation);
+                  setStatusMessages((prev) => [...prev, "Annotation saved"]);
+                } else if (event.type === "complete") {
+                  setStatusMessages((prev) => [...prev, event.message]);
+                } else if (event.type === "error") {
+                  setError(event.message);
+                  shouldAbort = true;
+                  break;
+                }
+              } catch (parseError) {
+                console.error("Failed to parse stream chunk", parseError, chunk);
+              }
+            }
+            newlineIndex = buffer.indexOf("\n");
+          }
+        }
+
+        if (!shouldAbort) {
+          const trailing = buffer.trim();
+          if (trailing) {
+            try {
+              const event = JSON.parse(trailing) as NoteStreamEvent;
+              if (event.type === "note_saved") {
+                setNoteMetadata(event.note);
+                setAnnotation(event.note.annotation);
+                if (event.transcript) {
+                  setTranscript(event.transcript);
+                }
+                setStatusMessages((prev) => [...prev, "Annotation saved"]);
+              } else if (event.type === "complete") {
+                setStatusMessages((prev) => [...prev, event.message]);
+              } else if (event.type === "error") {
+                setError(event.message);
+              }
+            } catch (parseError) {
+              console.error("Failed to parse trailing stream chunk", parseError, trailing);
+            }
+          }
+        } else {
+          try {
+            await reader.cancel();
+          } catch (cancelError) {
+            console.error("Failed to cancel reader after error", cancelError);
+          }
+        }
       } catch (err) {
         console.error(err);
         setError(
@@ -240,7 +331,14 @@ export default function NotesPage(): JSX.Element {
             <div className="flex items-center justify-between">
               <div className="text-sm text-slate-500">
                 {error && <span className="text-rose-400">{error}</span>}
-                {!error && annotation && <span className="text-emerald-400">Annotation ready!</span>}
+                {!error && statusMessages.length > 0 && (
+                  <span className="text-indigo-300">
+                    {statusMessages[statusMessages.length - 1]}
+                  </span>
+                )}
+                {!error && !isSubmitting && annotation && (
+                  <span className="ml-3 text-emerald-400">Annotation ready!</span>
+                )}
               </div>
               <Button type="submit" disabled={!isReadyToSubmit}>
                 {isSubmitting ? "Generating annotation…" : "Save note & annotate"}
@@ -249,12 +347,26 @@ export default function NotesPage(): JSX.Element {
           </form>
         </section>
 
+        {transcript && (
+          <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-6 shadow-lg">
+            <h2 className="text-lg font-semibold">GPT-5 transcript</h2>
+            <p className="mt-3 whitespace-pre-line text-sm leading-6 text-slate-200">
+              {transcript}
+            </p>
+          </section>
+        )}
+
         {annotation && (
           <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-6 shadow-lg">
             <h2 className="text-lg font-semibold">GPT-5 annotation</h2>
             <p className="mt-3 whitespace-pre-line text-sm leading-6 text-slate-200">
               {annotation}
             </p>
+            {noteMetadata?.note_id && (
+              <p className="mt-4 text-xs text-slate-500">
+                Saved note ID: <span className="font-mono text-slate-300">{noteMetadata.note_id}</span>
+              </p>
+            )}
           </section>
         )}
       </main>

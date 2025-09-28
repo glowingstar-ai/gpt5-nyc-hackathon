@@ -8,6 +8,7 @@ from app.services.emotion import EmotionAnalyzer
 from app.services.generative_ui import GenerativeUIService
 from app.services.journal import JournalCoach
 from app.services.note import NoteAnnotator
+from app.services.transcription import AudioTranscriber
 from app.services.payment import StripePaymentService
 from app.services.realtime import RealtimeSessionClient
 from app.services.research import ResearchDiscoveryService
@@ -88,6 +89,28 @@ def get_audio_storage() -> S3AudioStorage:
     try:
         return _get_audio_storage()
     except StorageServiceError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
+@lru_cache
+def _get_audio_transcriber() -> AudioTranscriber:
+    settings = _get_settings()
+    if not settings.openai_api_key:
+        raise ValueError("Transcription service is not configured")
+
+    return AudioTranscriber(
+        api_key=settings.openai_api_key,
+        base_url=settings.openai_api_base_url,
+        model=settings.openai_transcription_model,
+    )
+
+
+def get_audio_transcriber() -> AudioTranscriber:
+    """Return the configured OpenAI audio transcription client."""
+
+    try:
+        return _get_audio_transcriber()
+    except ValueError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 

@@ -13,6 +13,7 @@ from .note import AnnotationResult, NoteAnnotator, NoteAnnotationError
 from .payment import CheckoutSession, StripePaymentError, StripePaymentService
 from .research import ResearchDiscoveryService
 from .storage import AudioUploadResult, S3AudioStorage, StorageServiceError
+from .transcription import AudioTranscriber, AudioTranscriptionError, TranscriptionResult
 from .tutor import TutorModeService
 
 __all__ = [
@@ -38,6 +39,9 @@ __all__ = [
     "AudioUploadResult",
     "S3AudioStorage",
     "StorageServiceError",
+    "AudioTranscriber",
+    "AudioTranscriptionError",
+    "TranscriptionResult",
     "TutorModeService",
     "ResearchDiscoveryService",
 ]

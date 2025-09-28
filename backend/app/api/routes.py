@@ -14,6 +14,7 @@ from app.api.dependencies import (
     get_audio_storage,
     get_context_storage,
     get_emotion_analyzer,
+    get_generative_ui_service,
     get_journal_coach,
     get_note_annotator,
     get_payment_service,
@@ -30,6 +31,7 @@ from app.schemas.auth import (
     AuthUserInfoResponse,
 )
 from app.schemas.emotion import EmotionAnalysisRequest, EmotionAnalysisResponse
+from app.schemas.generative_ui import GenerativeUIRequest, GenerativeUIResponse
 from app.schemas.health import HealthResponse
 from app.schemas.payment import PaymentCheckoutRequest, PaymentCheckoutResponse
 from app.schemas.realtime import (
@@ -44,6 +46,11 @@ from app.schemas.note import NoteCreateRequest, NoteCreateResponse
 from app.schemas.tutor import TutorModeRequest, TutorModeResponse
 from app.services.auth import Auth0Client, Auth0ClientError
 from app.services.emotion import EmotionAnalyzer
+from app.services.generative_ui import (
+    GenerativeUIService,
+    GenerativeUIServiceError,
+    ThemeSuggestion,
+)
 from app.services.journal import JournalCoach, JournalCoachError
 from app.services.note import NoteAnnotator, NoteAnnotationError
 from app.services.payment import StripePaymentError, StripePaymentService
@@ -532,3 +539,43 @@ async def discover_research_papers(
             )
 
     return StreamingResponse(event_stream(), media_type="application/jsonl")
+
+
+@router.post(
+    "/generative-ui/chat",
+    response_model=GenerativeUIResponse,
+    tags=["generative-ui"],
+)
+async def generative_ui_chat(
+    payload: GenerativeUIRequest,
+    service: GenerativeUIService = Depends(get_generative_ui_service),
+) -> GenerativeUIResponse:
+    """Chat endpoint that returns UI guidance and theme suggestions."""
+
+    current_theme = None
+    if payload.current_theme:
+        current_theme = ThemeSuggestion(
+            primary_color=payload.current_theme.primary_color,
+            background_color=payload.current_theme.background_color,
+            accent_color=payload.current_theme.accent_color,
+            text_color=payload.current_theme.text_color,
+        )
+
+    try:
+        result = await service.generate(
+            messages=[message.model_dump() for message in payload.messages],
+            current_theme=current_theme,
+        )
+    except GenerativeUIServiceError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+    suggested_theme = None
+    if result.theme:
+        suggested_theme = {
+            "primary_color": result.theme.primary_color,
+            "background_color": result.theme.background_color,
+            "accent_color": result.theme.accent_color,
+            "text_color": result.theme.text_color,
+        }
+
+    return GenerativeUIResponse(message=result.message, suggested_theme=suggested_theme)

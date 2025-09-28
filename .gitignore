@@ -34,3 +34,6 @@ coverage/
 # Build artifacts
 build/
 dist/
+
+# images
+backend/captured_images

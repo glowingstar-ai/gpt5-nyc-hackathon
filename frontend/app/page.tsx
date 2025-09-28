@@ -47,13 +47,13 @@ const featureCards = [
     pill: "Live Analysis",
   },
   {
-    name: "Generative UI Studio",
+    name: "Realtime Assistant",
     description:
-      "Pair a PDF brief with a GPT-5 co-designer and iterate on palettes, typography, and layout instantly.",
-    href: "/generative-ui",
-    icon: Palette,
-    accent: "from-teal-300 via-cyan-200 to-blue-400",
-    pill: "Live Theming",
+      "Step into a live co-pilot that blends voice, context, and automation into a single responsive teammate.",
+    href: "/realtime-assistant",
+    icon: Star,
+    accent: "from-emerald-300/80 to-teal-400/80",
+    pill: "Live Copilot",
   },
   {
     name: "Notes Workspace",
@@ -65,15 +65,6 @@ const featureCards = [
     pill: "Voice Notes",
   },
   {
-    name: "Evening Journal Studio",
-    description:
-      "Release the day with mood-driven prompts, breathwork cues, and affirmations from a guided journaling ritual.",
-    href: "/journal",
-    icon: Feather,
-    accent: "from-rose-400/80 to-amber-400/70",
-    pill: "Guided Ritual",
-  },
-  {
     name: "Tutor Mode Studio",
     description:
       "Design an adaptive teaching blueprint tailored to your learner's goals, modalities, and context.",
@@ -81,6 +72,15 @@ const featureCards = [
     icon: GraduationCap,
     accent: "from-violet-300/80 to-fuchsia-400/80",
     pill: "Tutor Plans",
+  },
+  {
+    name: "Evening Journal Studio",
+    description:
+      "Release the day with mood-driven prompts, breathwork cues, and affirmations from a guided journaling ritual.",
+    href: "/journal",
+    icon: Feather,
+    accent: "from-rose-400/80 to-amber-400/70",
+    pill: "Guided Ritual",
   },
   {
     name: "Research Explorer",
@@ -92,13 +92,13 @@ const featureCards = [
     pill: "Live RAG",
   },
   {
-    name: "Realtime Assistant",
+    name: "Generative UI Studio",
     description:
-      "Step into a live co-pilot that blends voice, context, and automation into a single responsive teammate.",
-    href: "/realtime-assistant",
-    icon: Star,
-    accent: "from-emerald-300/80 to-teal-400/80",
-    pill: "Live Copilot",
+      "Pair a PDF brief with a GPT-5 co-designer and iterate on palettes, typography, and layout instantly.",
+    href: "/generative-ui",
+    icon: Palette,
+    accent: "from-teal-300 via-cyan-200 to-blue-400",
+    pill: "Live Theming",
   },
 ];
 

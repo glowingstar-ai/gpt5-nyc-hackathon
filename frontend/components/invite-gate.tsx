@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 
 const INVITE_CODE = "chenyu";
@@ -41,7 +42,11 @@ const storeInvite = (value: StoredInvite | null) => {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
 };
 
+const UNPROTECTED_PATHS = new Set<string>(["/"]);
+
 export function InviteGate({ children }: InviteGateProps) {
+  const pathname = usePathname();
+  const shouldProtect = pathname ? !UNPROTECTED_PATHS.has(pathname) : false;
   const [status, setStatus] = useState<InviteStatus>("loading");
   const [codeInput, setCodeInput] = useState("");
   const [waitlistEmail, setWaitlistEmail] = useState("");
@@ -51,6 +56,13 @@ export function InviteGate({ children }: InviteGateProps) {
   const isVerified = status === "granted";
 
   useEffect(() => {
+    if (!shouldProtect) {
+      setStatus("granted");
+      return;
+    }
+
+    setStatus("loading");
+
     const stored = loadStoredInvite();
     if (!stored) {
       setStatus("prompt");
@@ -64,7 +76,16 @@ export function InviteGate({ children }: InviteGateProps) {
       storeInvite(null);
       setStatus("prompt");
     }
-  }, []);
+  }, [shouldProtect]);
+
+  useEffect(() => {
+    if (!shouldProtect) {
+      setCodeInput("");
+      setErrorMessage(null);
+      setWaitlistEmail("");
+      setWaitlistMessage(null);
+    }
+  }, [shouldProtect]);
 
   const handleCodeSubmit = useCallback(
     (event: React.FormEvent<HTMLFormElement>) => {
@@ -100,6 +121,10 @@ export function InviteGate({ children }: InviteGateProps) {
     },
     [waitlistEmail]
   );
+
+  if (!shouldProtect) {
+    return <>{children}</>;
+  }
 
   return (
     <div className="relative min-h-screen">

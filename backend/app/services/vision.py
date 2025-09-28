@@ -15,6 +15,15 @@ class VisionAnalysisError(RuntimeError):
 
 
 @dataclass(slots=True)
+class HighlightInstruction:
+    """Instruction for the frontend to highlight a DOM node."""
+
+    selector: str
+    action: str
+    reason: str | None = None
+
+
+@dataclass(slots=True)
 class VisionContext:
     """Structured visual context extracted from a screenshot."""
 
@@ -26,6 +35,9 @@ class VisionContext:
     source: str
     image_base64: str
     captured_at: datetime | None
+    dom_snapshot: str | None
+    dom_summary: str | None
+    highlight_instructions: list[HighlightInstruction]
 
 
 class VisionAnalyzer:
@@ -36,7 +48,7 @@ class VisionAnalyzer:
         *,
         api_key: str,
         base_url: str = "https://api.openai.com/v1",
-        model: str = "gpt-4o",
+        model: str = "gpt-5.0",
         timeout: float = 30.0,
     ) -> None:
         self.api_key = api_key
@@ -49,6 +61,7 @@ class VisionAnalyzer:
         image_base64: str,
         source: str = "ui",
         captured_at: datetime | None = None,
+        dom_snapshot: str | None = None,
     ) -> VisionContext:
         """Analyze a screenshot and extract meaningful context for conversation."""
         
@@ -61,8 +74,8 @@ class VisionAnalyzer:
         except Exception as exc:
             raise VisionAnalysisError("Invalid base64-encoded image") from exc
         
-        prompt = self._build_analysis_prompt(source)
-        
+        prompt = self._build_analysis_prompt(source, dom_snapshot)
+
         payload = {
             "model": self.model,
             "messages": [
@@ -116,19 +129,39 @@ class VisionAnalyzer:
             timestamp=captured_at,
             source=source,
             image_base64=image_base64,
+            dom_snapshot=dom_snapshot,
         )
 
-    def _build_analysis_prompt(self, source: str) -> str:
+    def _build_analysis_prompt(self, source: str, dom_snapshot: str | None) -> str:
         """Build the analysis prompt based on the source type."""
-        
+
+        dom_context = ""
+        if dom_snapshot:
+            # Truncate excessively large DOM payloads to keep the prompt manageable
+            trimmed = dom_snapshot[:6000]
+            if len(dom_snapshot) > 6000:
+                trimmed += "\n... [truncated]"
+            dom_context = (
+                "\n\nDOM digest (JSON with CSS selectors and text content):\n" + trimmed
+            )
+
         if source == "ui":
-            return """Analyze this UI screenshot and provide a structured analysis in the following JSON format:
+            return (
+                """Analyze this UI screenshot and the provided DOM digest. Respond with valid JSON in the following format:
 
 {
   "description": "A clear, concise description of what's visible in the screenshot",
   "key_elements": ["List of important UI elements, text, buttons, or components visible"],
   "user_intent": "What the user might be trying to accomplish based on the UI state",
-  "actionable_items": ["Specific actions or items the user could interact with"]
+  "actionable_items": ["Specific actions or items the user could interact with"],
+  "dom_summary": "Short summary of relevant DOM details",
+  "highlights": [
+    {
+      "selector": "Exact CSS selector from the DOM digest to highlight",
+      "action": "highlight",
+      "reason": "Why this element is relevant to the user's request"
+    }
+  ]
 }
 
 Focus on:
@@ -138,8 +171,12 @@ Focus on:
 - What the user might be working on or trying to achieve
 - Any errors, notifications, or important information displayed
 
-Be specific and actionable. If this appears to be a development environment, note any code, errors, or development tools visible."""
-        
+Be specific and actionable. If this appears to be a development environment, note any code, errors, or development tools visible.
+
+Use selectors exactly as they appear in the DOM digest. Provide at most five highlight instructions prioritizing the most relevant UI elements."""
+                + dom_context
+            )
+
         else:  # camera
             return """Analyze this camera image and provide a structured analysis in the following JSON format:
 
@@ -164,9 +201,10 @@ Focus on:
         timestamp: datetime,
         source: str,
         image_base64: str,
+        dom_snapshot: str | None,
     ) -> VisionContext:
         """Parse the analysis response into a structured VisionContext."""
-        
+
         try:
             import json
             
@@ -180,6 +218,24 @@ Focus on:
             json_str = content[start_idx:end_idx]
             data = json.loads(json_str)
             
+            highlights_raw = data.get("highlights", [])
+            highlight_instructions: list[HighlightInstruction] = []
+            if isinstance(highlights_raw, list):
+                for item in highlights_raw:
+                    if not isinstance(item, dict):
+                        continue
+                    selector = item.get("selector")
+                    action = item.get("action", "highlight")
+                    reason = item.get("reason")
+                    if isinstance(selector, str) and selector.strip():
+                        highlight_instructions.append(
+                            HighlightInstruction(
+                                selector=selector.strip(),
+                                action=str(action) if isinstance(action, str) else "highlight",
+                                reason=reason.strip() if isinstance(reason, str) else None,
+                            )
+                        )
+
             return VisionContext(
                 description=data.get("description", "Screenshot analysis"),
                 key_elements=data.get("key_elements", []),
@@ -189,6 +245,9 @@ Focus on:
                 source=source,
                 image_base64=image_base64,
                 captured_at=timestamp,
+                dom_snapshot=dom_snapshot,
+                dom_summary=data.get("dom_summary"),
+                highlight_instructions=highlight_instructions,
             )
 
         except (json.JSONDecodeError, ValueError, KeyError) as exc:
@@ -202,4 +261,7 @@ Focus on:
                 source=source,
                 image_base64=image_base64,
                 captured_at=timestamp,
+                dom_snapshot=dom_snapshot,
+                dom_summary=None,
+                highlight_instructions=[],
             )

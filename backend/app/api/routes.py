@@ -21,6 +21,7 @@ from app.api.dependencies import (
     get_research_service,
     get_settings,
     get_tutor_service,
+    get_vision_analyzer,
 )
 from app.core.config import Settings
 from app.schemas.auth import (
@@ -33,6 +34,7 @@ from app.schemas.emotion import EmotionAnalysisRequest, EmotionAnalysisResponse
 from app.schemas.health import HealthResponse
 from app.schemas.payment import PaymentCheckoutRequest, PaymentCheckoutResponse
 from app.schemas.realtime import (
+    HighlightInstruction as HighlightInstructionSchema,
     RealtimeSessionToken,
     VisionFrameRequest,
     VisionFrameResponse,
@@ -51,7 +53,11 @@ from app.services.realtime import RealtimeSessionClient, RealtimeSessionError
 from app.services.research import ResearchDiscoveryService
 from app.services.storage import S3AudioStorage, StorageServiceError
 from app.services.tutor import TutorModeService
-from app.services.vision import VisionContext
+from app.services.vision import (
+    VisionAnalysisError,
+    VisionAnalyzer,
+    VisionContext,
+)
 from app.services.context_storage import ContextStorage
 
 router = APIRouter()
@@ -171,6 +177,7 @@ async def create_realtime_session(
     # Enhance instructions with visual context if available
     enhanced_instructions = None
     latest_frame_base64: str | None = None
+    highlight_payload: list[HighlightInstructionSchema] | None = None
     if recent_context:
         latest_frame_base64 = recent_context.image_base64
 
@@ -199,6 +206,25 @@ async def create_realtime_session(
             if actionable_items:
                 summary_lines.append("- Actionable items: " + ", ".join(actionable_items))
 
+        if recent_context.dom_summary and recent_context.dom_summary.strip():
+            summary_lines.append("- DOM summary: " + recent_context.dom_summary.strip())
+
+        if recent_context.highlight_instructions:
+            highlight_payload = [
+                HighlightInstructionSchema(
+                    selector=instruction.selector,
+                    action=instruction.action,
+                    reason=instruction.reason,
+                )
+                for instruction in recent_context.highlight_instructions
+            ]
+            if highlight_payload:
+                highlight_overview = ", ".join(
+                    f"{item.selector}{f' ({item.reason})' if item.reason else ''}"
+                    for item in highlight_payload
+                )
+                summary_lines.append("- Highlight candidates: " + highlight_overview)
+
         if not summary_lines:
             summary_lines.append(
                 "- Visual analysis metadata is unavailable. Request additional processing if you need structured details."
@@ -213,7 +239,21 @@ Visual context summary:
 
 A raw base64-encoded frame captured by the client is available for immediate multimodal processing.
 
+When responding to the user, you MUST reply with valid JSON using this schema:
+
+{{
+  "answer": "Helpful natural-language response to the user",
+  "highlights": [
+    {{"selector": "CSS selector from the DOM digest", "action": "highlight", "reason": "Why it matters"}}
+  ]
+}}
+
+Return an empty array for "highlights" if nothing should be highlighted. Do not include Markdown or additional prose outside the JSON.
+
 Use this visual context to provide more relevant and helpful responses. You can reference what you see on their screen, help them with tasks they're working on, or answer questions about the content they're viewing. Be specific about what you observe and how you can assist them with their current activity."""
+
+        if recent_context.dom_snapshot:
+            enhanced_instructions += "\n\nDOM digest (JSON):\n" + recent_context.dom_snapshot
 
     try:
         # Create a new client with enhanced instructions
@@ -238,6 +278,9 @@ Use this visual context to provide more relevant and helpful responses. You can 
         url=session.handshake_url,
         voice=session.voice,
         latest_frame_base64=latest_frame_base64,
+        dom_summary=recent_context.dom_summary if recent_context else None,
+        dom_snapshot=recent_context.dom_snapshot if recent_context else None,
+        highlight_instructions=highlight_payload,
     )
 
 
@@ -245,6 +288,7 @@ Use this visual context to provide more relevant and helpful responses. You can 
 async def accept_vision_frame(
     payload: VisionFrameRequest,
     context_storage: ContextStorage = Depends(get_context_storage),
+    analyzer: VisionAnalyzer = Depends(get_vision_analyzer),
 ) -> VisionFrameResponse:
     """Accept a base64-encoded frame from the client camera or UI surface."""
 
@@ -276,17 +320,29 @@ async def accept_vision_frame(
         # Don't fail the request if image saving fails, just log it
         print(f"Failed to save image: {exc}")
 
-    # Store the raw frame for potential use in realtime conversations
-    context = VisionContext(
-        description="Raw frame capture (analysis disabled)",
-        key_elements=[],
-        user_intent=None,
-        actionable_items=[],
-        timestamp=received_at,
-        source=payload.source,
-        image_base64=payload.image_base64,
-        captured_at=payload.captured_at,
-    )
+    # Analyze the frame with GPT-5 to extract semantic context and highlight instructions
+    try:
+        context = await analyzer.analyze_screenshot(
+            payload.image_base64,
+            source=payload.source,
+            captured_at=payload.captured_at,
+            dom_snapshot=payload.dom_snapshot,
+        )
+    except VisionAnalysisError as exc:
+        print(f"Vision analysis failed: {exc}")
+        context = VisionContext(
+            description="Raw frame capture (analysis unavailable)",
+            key_elements=[],
+            user_intent=None,
+            actionable_items=[],
+            timestamp=received_at,
+            source=payload.source,
+            image_base64=payload.image_base64,
+            captured_at=payload.captured_at,
+            dom_snapshot=payload.dom_snapshot,
+            dom_summary=None,
+            highlight_instructions=[],
+        )
 
     # Use a session ID based on timestamp for now (in production, use actual session ID)
     session_id = f"session_{int(received_at.timestamp())}"
@@ -298,6 +354,17 @@ async def accept_vision_frame(
         captured_at=payload.captured_at,
         received_at=received_at,
         source=payload.source,
+        description=context.description,
+        dom_summary=context.dom_summary,
+        highlight_instructions=[
+            HighlightInstructionSchema(
+                selector=instruction.selector,
+                action=instruction.action,
+                reason=instruction.reason,
+            )
+            for instruction in context.highlight_instructions
+        ]
+        or None,
     )
 
 

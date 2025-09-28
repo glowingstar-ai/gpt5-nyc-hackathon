@@ -3,10 +3,21 @@
 from __future__ import annotations
 
 from datetime import datetime
-
 from typing import Literal
 
 from pydantic import BaseModel, Field
+
+
+class HighlightInstruction(BaseModel):
+    """Instruction for the client to highlight a DOM element."""
+
+    selector: str = Field(description="CSS selector targeting the DOM node")
+    action: Literal["highlight"] = Field(
+        default="highlight", description="Type of UI affordance to perform"
+    )
+    reason: str | None = Field(
+        default=None, description="Why the element should be highlighted"
+    )
 
 
 class RealtimeSessionToken(BaseModel):
@@ -22,6 +33,18 @@ class RealtimeSessionToken(BaseModel):
         default=None,
         description="Most recent raw frame captured from the client, encoded as base64 JPEG",
     )
+    dom_summary: str | None = Field(
+        default=None,
+        description="High level summary of the most recent DOM snapshot analyzed by the assistant",
+    )
+    dom_snapshot: str | None = Field(
+        default=None,
+        description="Raw DOM digest provided by the client for the latest vision frame",
+    )
+    highlight_instructions: list[HighlightInstruction] | None = Field(
+        default=None,
+        description="Structured highlight suggestions derived from the analyzed context",
+    )
 
 
 class VisionFrameRequest(BaseModel):
@@ -34,6 +57,10 @@ class VisionFrameRequest(BaseModel):
     source: Literal["camera", "ui"] = Field(
         default="camera",
         description="Originating surface for the submitted frame (camera or UI screenshot)",
+    )
+    dom_snapshot: str | None = Field(
+        default=None,
+        description="Serialized DOM digest captured alongside the frame (JSON string)",
     )
 
 
@@ -50,5 +77,16 @@ class VisionFrameResponse(BaseModel):
     )
     source: Literal["camera", "ui"] = Field(
         description="Originating surface for the submitted frame (camera or UI screenshot)",
+    )
+    description: str | None = Field(
+        default=None, description="Structured description extracted from the frame"
+    )
+    dom_summary: str | None = Field(
+        default=None,
+        description="Summary of the DOM provided with the frame, if available",
+    )
+    highlight_instructions: list[HighlightInstruction] | None = Field(
+        default=None,
+        description="Highlight suggestions generated from the latest analysis",
     )
 

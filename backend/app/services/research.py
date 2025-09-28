@@ -81,7 +81,11 @@ class ResearchDiscoveryService:
         body: dict[str, Any] = {
             "model": self.openai_model,
             "input": prompt,
-            "response_format": {"type": "json_object"},
+            "text": {
+                "format": {
+                    "type": "json_object"
+                }
+            },
         }
         response = await self._post_openai(body)
         data = self._extract_json(response)

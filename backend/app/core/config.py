@@ -21,16 +21,16 @@ class Settings(BaseSettings):
         default=None, alias="OPENAI_REALTIME_INSTRUCTIONS"
     )
     openai_vision_model: str = Field(
-        default="gpt-5.0", alias="OPENAI_VISION_MODEL"
+        default="gpt-5", alias="OPENAI_VISION_MODEL"
     )
     openai_annotation_model: str = Field(
-        default="gpt-5.0", alias="OPENAI_ANNOTATION_MODEL"
+        default="gpt-5", alias="OPENAI_ANNOTATION_MODEL"
     )
     openai_research_model: str = Field(
-        default="gpt-5.0", alias="OPENAI_RESEARCH_MODEL"
+        default="gpt-5", alias="OPENAI_RESEARCH_MODEL"
     )
     openai_generative_ui_model: str = Field(
-        default="gpt-5.0", alias="OPENAI_GENERATIVE_UI_MODEL"
+        default="gpt-5", alias="OPENAI_GENERATIVE_UI_MODEL"
     )
     aws_access_key_id: str | None = Field(default=None, alias="AWS_ACCESS_KEY_ID")
     aws_secret_access_key: str | None = Field(

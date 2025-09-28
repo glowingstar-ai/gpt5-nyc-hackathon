@@ -150,7 +150,11 @@ class TutorModeService:
         body: dict[str, Any] = {
             "model": self.model,
             "input": prompt,
-            "response_format": {"type": "json_object"},
+            "text": {
+                "format": {
+                    "type": "json_object"
+                }
+            },
         }
 
         async with httpx.AsyncClient(timeout=self.timeout) as client:

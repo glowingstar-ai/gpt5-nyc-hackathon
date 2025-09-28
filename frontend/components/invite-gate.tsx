@@ -50,8 +50,6 @@ export function InviteGate({ children }: InviteGateProps) {
   const shouldProtect = pathname ? !UNPROTECTED_PATHS.has(pathname) : false;
   const [status, setStatus] = useState<InviteStatus>("loading");
   const [codeInput, setCodeInput] = useState("");
-  const [waitlistEmail, setWaitlistEmail] = useState("");
-  const [waitlistMessage, setWaitlistMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const isVerified = status === "granted";
@@ -83,8 +81,6 @@ export function InviteGate({ children }: InviteGateProps) {
     if (!shouldProtect) {
       setCodeInput("");
       setErrorMessage(null);
-      setWaitlistEmail("");
-      setWaitlistMessage(null);
     }
   }, [shouldProtect]);
 
@@ -105,25 +101,9 @@ export function InviteGate({ children }: InviteGateProps) {
     [codeInput]
   );
 
-  const handleWaitlistSubmit = useCallback(
-    (event: React.FormEvent<HTMLFormElement>) => {
-      event.preventDefault();
-      setWaitlistMessage(null);
-
-      if (!waitlistEmail.trim()) {
-        setWaitlistMessage(
-          "Please enter an email address to join the waitlist."
-        );
-        return;
-      }
-
-      setWaitlistMessage(
-        "Thanks! We\'ve added you to the waitlist and will reach out as soon as private beta slots open."
-      );
-      setWaitlistEmail("");
-    },
-    [waitlistEmail]
-  );
+  const handleWaitlistClick = useCallback(() => {
+    window.open("https://forms.gle/jVB2LjuMHgYGP1wo7", "_blank");
+  }, []);
 
   const handleBackToLanding = useCallback(() => {
     router.push("/");
@@ -219,31 +199,12 @@ export function InviteGate({ children }: InviteGateProps) {
                     Join the waitlist and we&apos;ll reach out as soon as new
                     private beta spots open up.
                   </p>
-                  <form className="space-y-2" onSubmit={handleWaitlistSubmit}>
-                    <label className="sr-only" htmlFor="waitlist-email">
-                      Email address
-                    </label>
-                    <input
-                      id="waitlist-email"
-                      name="waitlist-email"
-                      type="email"
-                      value={waitlistEmail}
-                      onChange={(event) => setWaitlistEmail(event.target.value)}
-                      placeholder="you@example.com"
-                      className="w-full rounded-xl border border-transparent bg-white px-4 py-2 text-sm text-zinc-900 shadow-sm focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:bg-zinc-900 dark:text-white"
-                    />
-                    <button
-                      type="submit"
-                      className="w-full rounded-xl border border-indigo-200 bg-white px-4 py-2 text-sm font-semibold text-indigo-600 transition hover:border-indigo-300 hover:text-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2 focus:ring-offset-white dark:border-indigo-500/40 dark:bg-transparent dark:text-indigo-300 dark:hover:text-indigo-200 dark:focus:ring-offset-zinc-900"
-                    >
-                      Join the waitlist
-                    </button>
-                  </form>
-                  {waitlistMessage && (
-                    <p className="text-xs text-indigo-500 dark:text-indigo-300">
-                      {waitlistMessage}
-                    </p>
-                  )}
+                  <button
+                    onClick={handleWaitlistClick}
+                    className="w-full rounded-xl border border-indigo-200 bg-white px-4 py-2 text-sm font-semibold text-indigo-600 transition hover:border-indigo-300 hover:text-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-400 focus:ring-offset-2 focus:ring-offset-white dark:border-indigo-500/40 dark:bg-transparent dark:text-indigo-300 dark:hover:text-indigo-200 dark:focus:ring-offset-zinc-900"
+                  >
+                    Join the waitlist
+                  </button>
                 </div>
               </div>
             )}

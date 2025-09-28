@@ -12,11 +12,15 @@ class HighlightInstruction(BaseModel):
     """Instruction for the client to highlight a DOM element."""
 
     selector: str = Field(description="CSS selector targeting the DOM node")
-    action: Literal["highlight"] = Field(
+    action: Literal["highlight", "execute"] = Field(
         default="highlight", description="Type of UI affordance to perform"
     )
     reason: str | None = Field(
         default=None, description="Why the element should be highlighted"
+    )
+    script: str | None = Field(
+        default=None,
+        description="Optional JavaScript snippet to execute when action is 'execute'",
     )
 
 

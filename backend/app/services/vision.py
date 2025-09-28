@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import base64
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
@@ -21,6 +21,7 @@ class HighlightInstruction:
     selector: str
     action: str
     reason: str | None = None
+    script: str | None = None
 
 
 @dataclass(slots=True)
@@ -35,9 +36,9 @@ class VisionContext:
     source: str
     image_base64: str
     captured_at: datetime | None
-    dom_snapshot: str | None
-    dom_summary: str | None
-    highlight_instructions: list[HighlightInstruction]
+    dom_snapshot: str | None = None
+    dom_summary: str | None = None
+    highlight_instructions: list[HighlightInstruction] = field(default_factory=list)
 
 
 class VisionAnalyzer:
@@ -159,7 +160,8 @@ class VisionAnalyzer:
     {
       "selector": "Exact CSS selector from the DOM digest to highlight",
       "action": "highlight",
-      "reason": "Why this element is relevant to the user's request"
+      "reason": "Why this element is relevant to the user's request",
+      "script": "Optional JavaScript snippet to run when action is \"execute\""
     }
   ]
 }
@@ -172,6 +174,8 @@ Focus on:
 - Any errors, notifications, or important information displayed
 
 Be specific and actionable. If this appears to be a development environment, note any code, errors, or development tools visible.
+
+Use `action: "execute"` along with a `script` when client-side JavaScript should run (for example, to scroll, focus, or synthesize custom highlighting). Scripts should be concise and safe to execute in the browser context. Omit the `script` field for simple highlight instructions.
 
 Use selectors exactly as they appear in the DOM digest. Provide at most five highlight instructions prioritizing the most relevant UI elements."""
                 + dom_context
@@ -227,14 +231,35 @@ Focus on:
                     selector = item.get("selector")
                     action = item.get("action", "highlight")
                     reason = item.get("reason")
-                    if isinstance(selector, str) and selector.strip():
-                        highlight_instructions.append(
-                            HighlightInstruction(
-                                selector=selector.strip(),
-                                action=str(action) if isinstance(action, str) else "highlight",
-                                reason=reason.strip() if isinstance(reason, str) else None,
-                            )
+                    script = item.get("script")
+
+                    selector_value = selector.strip() if isinstance(selector, str) else ""
+                    action_value = (
+                        action.strip().lower()
+                        if isinstance(action, str) and action.strip()
+                        else "highlight"
+                    )
+                    if action_value not in {"highlight", "execute"}:
+                        action_value = "highlight"
+
+                    if action_value == "highlight" and not selector_value:
+                        continue
+
+                    reason_value = (
+                        reason.strip() if isinstance(reason, str) and reason.strip() else None
+                    )
+                    script_value = (
+                        script.strip() if isinstance(script, str) and script.strip() else None
+                    )
+
+                    highlight_instructions.append(
+                        HighlightInstruction(
+                            selector=selector_value,
+                            action=action_value,
+                            reason=reason_value,
+                            script=script_value,
                         )
+                    )
 
             return VisionContext(
                 description=data.get("description", "Screenshot analysis"),

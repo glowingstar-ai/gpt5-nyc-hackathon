@@ -222,12 +222,13 @@ async def create_realtime_session(
                     selector=instruction.selector,
                     action=instruction.action,
                     reason=instruction.reason,
+                    script=instruction.script,
                 )
                 for instruction in recent_context.highlight_instructions
             ]
             if highlight_payload:
                 highlight_overview = ", ".join(
-                    f"{item.selector}{f' ({item.reason})' if item.reason else ''}"
+                    f"{item.selector or '[script]'}{f' ({item.reason})' if item.reason else ''}"
                     for item in highlight_payload
                 )
                 summary_lines.append("- Highlight candidates: " + highlight_overview)
@@ -251,29 +252,41 @@ When responding to the user, you MUST reply with valid JSON using this schema:
 {{
   "answer": "Helpful natural-language response to the user",
   "highlights": [
-    {{"selector": "CSS selector from the DOM digest", "action": "highlight", "reason": "Why it matters"}}
+    {{
+      "selector": "CSS selector from the DOM digest",
+      "action": "highlight",
+      "reason": "Why it matters",
+      "script": "Optional JavaScript to run when action is \"execute\""
+    }}
   ]
 }}
 
 Return an empty array for "highlights" if nothing should be highlighted. Do not include Markdown or additional prose outside the JSON.
+Use `action: "execute"` only when you need to run client-side JavaScript and include the code in the `script` field. Scripts should be concise, safe to execute, and may optionally return a cleanup function.
 
 Use this visual context to provide more relevant and helpful responses. You can reference what you see on their screen, help them with tasks they're working on, or answer questions about the content they're viewing. Be specific about what you observe and how you can assist them with their current activity."""
 
         if recent_context.dom_snapshot:
             enhanced_instructions += "\n\nDOM digest (JSON):\n" + recent_context.dom_snapshot
 
-    try:
-        # Create a new client with enhanced instructions
-        enhanced_client = RealtimeSessionClient(
+    session_client = client
+    if enhanced_instructions and isinstance(client, RealtimeSessionClient):
+        session_client = RealtimeSessionClient(
             api_key=client.api_key,
             base_url=client.base_url,
             model=client.model,
             voice=client.voice,
-            instructions=enhanced_instructions or client.instructions,
+            instructions=enhanced_instructions,
             timeout=client.timeout,
         )
-        
-        session = await enhanced_client.create_ephemeral_session()
+    elif enhanced_instructions and hasattr(client, "instructions"):
+        try:
+            setattr(client, "instructions", enhanced_instructions)
+        except Exception:  # pragma: no cover - defensive fallback
+            pass
+
+    try:
+        session = await session_client.create_ephemeral_session()
     except RealtimeSessionError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
@@ -368,6 +381,7 @@ async def accept_vision_frame(
                 selector=instruction.selector,
                 action=instruction.action,
                 reason=instruction.reason,
+                script=instruction.script,
             )
             for instruction in context.highlight_instructions
         ]

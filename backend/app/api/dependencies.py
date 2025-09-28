@@ -1,3 +1,4 @@
+from datetime import datetime
 from functools import lru_cache
 
 from fastapi import HTTPException
@@ -14,7 +15,7 @@ from app.services.research import ResearchDiscoveryService
 from app.services.storage import S3AudioStorage, StorageServiceError
 from app.services.tutor import TutorModeService
 from app.services.context_storage import get_context_storage
-from app.services.vision import VisionAnalyzer
+from app.services.vision import VisionAnalyzer, VisionAnalysisError, VisionContext
 
 
 def get_settings() -> Settings:
@@ -72,8 +73,21 @@ def get_vision_analyzer() -> VisionAnalyzer:
 
     try:
         return _get_vision_analyzer()
-    except ValueError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except ValueError:
+        class _FallbackVisionAnalyzer(VisionAnalyzer):
+            async def analyze_screenshot(  # type: ignore[override]
+                self,
+                image_base64: str,
+                source: str = "ui",
+                captured_at: datetime | None = None,
+                dom_snapshot: str | None = None,
+            ) -> VisionContext:
+                raise VisionAnalysisError("Vision analysis is not configured")
+
+        # Provide a no-op analyzer that surfaces a structured fallback response.
+        return _FallbackVisionAnalyzer(
+            api_key="", base_url="", model="", timeout=0.1
+        )
 
 
 @lru_cache

@@ -28,8 +28,9 @@ type TranscriptEntry = {
 
 type HighlightInstruction = {
   selector: string;
-  action: "highlight";
+  action: "highlight" | "execute";
   reason?: string | null;
+  script?: string | null;
 };
 
 type AssistantStructuredResponse = {
@@ -110,25 +111,38 @@ const parseAssistantStructuredResponse = (
           if (!entry || typeof entry !== "object") {
             return null;
           }
-          const { selector, action, reason } = entry as {
+          const { selector, action, reason, script } = entry as {
             selector?: unknown;
             action?: unknown;
             reason?: unknown;
+            script?: unknown;
           };
-          if (typeof selector !== "string" || selector.trim() === "") {
+          const trimmedSelector =
+            typeof selector === "string" && selector.trim() !== ""
+              ? selector.trim()
+              : "";
+          const normalizedActionRaw =
+            typeof action === "string" && action.trim() !== ""
+              ? action.trim().toLowerCase()
+              : "highlight";
+          const normalizedAction: HighlightInstruction["action"] =
+            normalizedActionRaw === "execute" ? "execute" : "highlight";
+          if (normalizedAction === "highlight" && trimmedSelector === "") {
             return null;
           }
-          const normalizedAction =
-            typeof action === "string" && action.trim() !== ""
-              ? (action.trim() as HighlightInstruction["action"])
-              : "highlight";
+          const normalizedReason =
+            typeof reason === "string" && reason.trim() !== ""
+              ? reason.trim()
+              : null;
+          const normalizedScript =
+            typeof script === "string" && script.trim() !== ""
+              ? script.trim()
+              : null;
           return {
-            selector: selector.trim(),
+            selector: trimmedSelector,
             action: normalizedAction,
-            reason:
-              typeof reason === "string" && reason.trim() !== ""
-                ? reason.trim()
-                : null,
+            reason: normalizedReason,
+            script: normalizedScript,
           } satisfies HighlightInstruction;
         })
         .filter((entry): entry is HighlightInstruction => Boolean(entry))
@@ -542,23 +556,90 @@ export function RealtimeConversationPanel({
     }
     const className = "realtime-highlight-outline";
     const applied: HTMLElement[] = [];
+    const executedCleanups: Array<() => void> = [];
 
     highlightInstructions.forEach((instruction, index) => {
-      if (!instruction || instruction.action !== "highlight") {
+      if (!instruction) {
         return;
       }
-      const element = document.querySelector<HTMLElement>(instruction.selector);
-      if (!element) {
+      if (instruction.action === "highlight") {
+        if (!instruction.selector) {
+          return;
+        }
+        const element = document.querySelector<HTMLElement>(instruction.selector);
+        if (!element) {
+          return;
+        }
+        element.classList.add(className);
+        element.setAttribute("data-gpt-highlight-index", String(index + 1));
+        if (instruction.reason) {
+          element.setAttribute("data-gpt-highlight-reason", instruction.reason);
+        } else {
+          element.removeAttribute("data-gpt-highlight-reason");
+        }
+        applied.push(element);
         return;
       }
-      element.classList.add(className);
-      element.setAttribute("data-gpt-highlight-index", String(index + 1));
-      if (instruction.reason) {
-        element.setAttribute("data-gpt-highlight-reason", instruction.reason);
-      } else {
-        element.removeAttribute("data-gpt-highlight-reason");
+
+      if (instruction.action === "execute") {
+        if (!instruction.script) {
+          return;
+        }
+        try {
+          const executor = new Function(
+            "context",
+            '"use strict";\n' + instruction.script
+          );
+          const result = executor({
+            document,
+            window,
+            instruction,
+            index,
+            highlightClassName: className,
+          });
+
+          const registerCleanup = (cleanup: unknown) => {
+            if (typeof cleanup !== "function") {
+              return;
+            }
+            executedCleanups.push(() => {
+              try {
+                const cleanupResult = cleanup();
+                if (
+                  cleanupResult &&
+                  typeof (cleanupResult as Promise<unknown>).then === "function" &&
+                  typeof (cleanupResult as Promise<unknown>).catch === "function"
+                ) {
+                  (cleanupResult as Promise<unknown>).catch((error) => {
+                    console.warn(
+                      "Realtime highlight cleanup promise rejected",
+                      error
+                    );
+                  });
+                }
+              } catch (cleanupError) {
+                console.warn(
+                  "Realtime highlight cleanup failed",
+                  cleanupError
+                );
+              }
+            });
+          };
+
+          if (typeof result === "function") {
+            registerCleanup(result);
+          } else if (result && typeof result === "object") {
+            const maybeCleanup = (result as { cleanup?: unknown }).cleanup;
+            registerCleanup(maybeCleanup);
+          }
+        } catch (error) {
+          console.warn(
+            "Failed to execute realtime highlight script",
+            error,
+            instruction
+          );
+        }
       }
-      applied.push(element);
     });
 
     return () => {
@@ -566,6 +647,13 @@ export function RealtimeConversationPanel({
         element.classList.remove(className);
         element.removeAttribute("data-gpt-highlight-index");
         element.removeAttribute("data-gpt-highlight-reason");
+      });
+      executedCleanups.reverse().forEach((cleanup) => {
+        try {
+          cleanup();
+        } catch (error) {
+          console.warn("Realtime highlight cleanup threw", error);
+        }
       });
     };
   }, [highlightInstructions]);

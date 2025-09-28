@@ -36,8 +36,11 @@
     "permissions": [
       "storage",
       "sidePanel",
-      "tabs",
-      "microphone"
+      "tabs"
+    ],
+    "optional_permissions": [
+      "microphone",
+      "audioCapture"
     ],
     "host_permissions": [
       "<all_urls>"

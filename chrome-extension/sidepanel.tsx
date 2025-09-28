@@ -17,6 +17,59 @@ type TranscriptEntry = {
 
 const DEFAULT_API_BASE = "http://localhost:8000/api/v1"
 
+const ensureMicrophonePermission = async (): Promise<boolean> => {
+  const permissionsApi = chrome?.permissions
+  if (!permissionsApi?.contains || !permissionsApi?.request) {
+    return true
+  }
+
+  const descriptor: chrome.permissions.Permissions = {
+    permissions: ["audioCapture"]
+  }
+
+  const hasPermission = await new Promise<boolean>((resolve) => {
+    try {
+      permissionsApi.contains(descriptor, (result) => {
+        if (chrome.runtime.lastError) {
+          console.warn(
+            "Unable to query microphone permission",
+            chrome.runtime.lastError
+          )
+          resolve(false)
+          return
+        }
+        resolve(Boolean(result))
+      })
+    } catch (err) {
+      console.warn("Microphone permission check failed", err)
+      resolve(false)
+    }
+  })
+
+  if (hasPermission) {
+    return true
+  }
+
+  return new Promise<boolean>((resolve) => {
+    try {
+      permissionsApi.request(descriptor, (granted) => {
+        if (chrome.runtime.lastError) {
+          console.warn(
+            "Microphone permission request failed",
+            chrome.runtime.lastError
+          )
+          resolve(false)
+          return
+        }
+        resolve(Boolean(granted))
+      })
+    } catch (err) {
+      console.warn("Microphone permission request threw", err)
+      resolve(false)
+    }
+  })
+}
+
 const waitForIceGathering = (pc: RTCPeerConnection): Promise<void> =>
   new Promise((resolve) => {
     if (pc.iceGatheringState === "complete") {
@@ -243,6 +296,13 @@ function SidePanel() {
         throw new Error("Realtime session response is missing required fields.")
       }
 
+      const hasMicrophone = await ensureMicrophonePermission()
+      if (!hasMicrophone) {
+        throw new Error(
+          "Microphone access is required. Enable it for the GPT-5 Realtime Companion extension in chrome://settings/content/microphone."
+        )
+      }
+
       const pc = new RTCPeerConnection()
       peerConnectionRef.current = pc
 
@@ -296,7 +356,7 @@ function SidePanel() {
         .catch((err) => {
           if (err.name === "NotAllowedError") {
             throw new Error(
-              "Microphone permission denied. Please allow microphone access in your browser settings."
+              "Microphone access is blocked. Please click the microphone icon in the address bar or enable access from chrome://settings/content/microphone."
             )
           } else if (err.name === "NotFoundError") {
             throw new Error(

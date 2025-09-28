@@ -24,6 +24,13 @@ type TranscriptEntry = {
   text: string;
 };
 
+const RTC_CONFIGURATION: RTCConfiguration = {
+  iceServers: [
+    { urls: "stun:stun.cloudflare.com:3478" },
+    { urls: "stun:stun.l.google.com:19302" },
+  ],
+};
+
 const waitForIceGathering = (pc: RTCPeerConnection): Promise<void> =>
   new Promise((resolve) => {
     if (pc.iceGatheringState === "complete") {
@@ -243,7 +250,7 @@ export function RealtimeConversationPanel({
           ? token.latest_frame_base64.trim()
           : null;
 
-      const pc = new RTCPeerConnection();
+      const pc = new RTCPeerConnection(RTC_CONFIGURATION);
       peerConnectionRef.current = pc;
 
       pc.ontrack = (event) => {

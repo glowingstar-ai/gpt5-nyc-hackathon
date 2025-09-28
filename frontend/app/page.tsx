@@ -277,8 +277,30 @@ export default function LandingPage(): JSX.Element {
                 <div className="absolute left-10 top-10 h-48 w-48 rounded-full bg-[radial-gradient(circle,_rgba(253,224,71,0.4),_rgba(2,6,23,0))] blur-xl" />
                 <div className="relative flex flex-col gap-6">
                   <div className="flex items-center justify-between text-sm text-slate-300">
-                    <span className="inline-flex items-center gap-2">
-                      <Star className="h-4 w-4 text-amber-200" />
+                    <span className="group inline-flex items-center gap-2">
+                      <span className="relative flex h-10 w-10 items-center justify-center">
+                        <span
+                          aria-hidden
+                          className="absolute inset-0 rounded-full bg-amber-300/20 opacity-60 blur-xl transition duration-500 group-hover:opacity-90"
+                        />
+                        <span
+                          aria-hidden
+                          className="absolute inset-[4px] rounded-full border border-amber-200/40 opacity-70 transition duration-500 group-hover:border-amber-100/80 group-hover:opacity-100"
+                        />
+                        <span
+                          aria-hidden
+                          className="pointer-events-none absolute inset-0 origin-center animate-glow-orbit"
+                        >
+                          <span className="absolute left-1/2 top-0 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-amber-100 shadow-[0_0_12px_rgba(253,224,71,0.65)]" />
+                        </span>
+                        <span
+                          aria-hidden
+                          className="pointer-events-none absolute inset-0 origin-center animate-glow-orbit-fast"
+                        >
+                          <span className="absolute left-0 top-1/2 h-1 w-1 -translate-y-1/2 rounded-full bg-white/80 shadow-[0_0_8px_rgba(253,224,71,0.45)]" />
+                        </span>
+                        <Star className="relative h-5 w-5 animate-glow-float text-amber-200 drop-shadow-[0_0_12px_rgba(253,224,71,0.65)] transition-transform duration-500 motion-reduce:animate-none group-hover:-rotate-6 group-hover:scale-110" />
+                      </span>
                       Glow dashboard
                     </span>
                     <span className="inline-flex items-center gap-2 text-amber-100">

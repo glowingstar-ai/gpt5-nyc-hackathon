@@ -2,6 +2,7 @@ import "./globals.css";
 
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import InviteGate from "@/components/invite-gate";
 import { ThemeProvider } from "@/components/theme-provider";
 import { inter, manrope, plexSans } from "@/lib/fonts";
 
@@ -29,7 +30,7 @@ export default function RootLayout({
     >
       <body>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          {children}
+          <InviteGate>{children}</InviteGate>
         </ThemeProvider>
       </body>
     </html>

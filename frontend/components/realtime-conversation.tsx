@@ -104,8 +104,8 @@ const parseAssistantStructuredResponse = (
     return null;
   }
 
-  const parsedHighlights: HighlightInstruction[] = Array.isArray(highlights)
-    ? (highlights as unknown[])
+  const parsedHighlights = Array.isArray(highlights)
+    ? ((highlights as unknown[])
         .map((entry) => {
           if (!entry || typeof entry !== "object") {
             return null;
@@ -125,13 +125,12 @@ const parseAssistantStructuredResponse = (
           return {
             selector: selector.trim(),
             action: normalizedAction,
-            reason:
-              typeof reason === "string" && reason.trim() !== ""
-                ? reason.trim()
-                : null,
+            ...(typeof reason === "string" && reason.trim() !== ""
+              ? { reason: reason.trim() }
+              : {}),
           } satisfies HighlightInstruction;
         })
-        .filter((entry): entry is HighlightInstruction => Boolean(entry))
+        .filter((entry) => entry !== null) as HighlightInstruction[])
     : [];
 
   return {
@@ -241,12 +240,11 @@ export function RealtimeConversationPanel({
           if (existing) {
             const structured = parseAssistantStructuredResponse(existing);
             if (structured) {
-              pendingResponsesRef.current.set(
-                responseId,
-                structured.answer
-              );
+              pendingResponsesRef.current.set(responseId, structured.answer);
               setTranscript((prev) => {
-                const index = prev.findIndex((entry) => entry.id === responseId);
+                const index = prev.findIndex(
+                  (entry) => entry.id === responseId
+                );
                 if (index === -1) return prev;
                 const clone = [...prev];
                 clone[index] = { ...clone[index], text: structured.answer };
@@ -257,7 +255,9 @@ export function RealtimeConversationPanel({
               const normalized = existing.trim();
               pendingResponsesRef.current.set(responseId, normalized);
               setTranscript((prev) => {
-                const index = prev.findIndex((entry) => entry.id === responseId);
+                const index = prev.findIndex(
+                  (entry) => entry.id === responseId
+                );
                 if (index === -1) return prev;
                 const clone = [...prev];
                 clone[index] = { ...clone[index], text: normalized };
@@ -289,7 +289,7 @@ export function RealtimeConversationPanel({
                   typeof id === "string" ? id : `user_${Date.now()}`;
                 setTranscript((prev) => [
                   ...prev,
-                  { id: entryId, role: "user", text: textPart.text },
+                  { id: entryId, role: "user", text: textPart.text as string },
                 ]);
               }
             }

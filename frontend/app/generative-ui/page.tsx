@@ -164,7 +164,8 @@ export default function GenerativeUIPage(): JSX.Element {
                 Generative UI Studio
               </h1>
               <p className="mt-1 text-sm text-slate-300">
-                Preview the PDF brief while GPT-5 shapes the experience on the right.
+                Preview the PDF brief while GPT-5 shapes the experience on the
+                right.
               </p>
             </div>
             <Palette className="h-10 w-10 text-cyan-300" aria-hidden />
@@ -176,7 +177,14 @@ export default function GenerativeUIPage(): JSX.Element {
               className="h-full w-full"
             >
               <p className="p-4 text-center text-sm text-slate-300">
-                Your browser cannot display PDFs. <Link href="/generative-ui-preview.pdf" className="text-cyan-300 underline">Download the brief</Link>.
+                Your browser cannot display PDFs.{" "}
+                <a
+                  href="/generative-ui-preview.pdf"
+                  className="text-cyan-300 underline"
+                >
+                  Download the brief
+                </a>
+                .
               </p>
             </object>
           </div>
@@ -189,14 +197,20 @@ export default function GenerativeUIPage(): JSX.Element {
           <div className="rounded-t-2xl border-b border-white/10 bg-[color:var(--background-color)]/80 px-6 py-5">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-lg font-semibold" style={{ color: "var(--text-color)" }}>
+                <h2
+                  className="text-lg font-semibold"
+                  style={{ color: "var(--text-color)" }}
+                >
                   GPT-5 Generative Panel
                 </h2>
                 <p className="text-sm text-slate-300">
                   Ask for palette shifts, typography vibes, or component tweaks.
                 </p>
               </div>
-              <Sparkles className="h-6 w-6 text-[color:var(--accent-color)]" aria-hidden />
+              <Sparkles
+                className="h-6 w-6 text-[color:var(--accent-color)]"
+                aria-hidden
+              />
             </div>
           </div>
 
@@ -239,9 +253,7 @@ export default function GenerativeUIPage(): JSX.Element {
                   className="w-full resize-none rounded-xl border border-slate-700/60 bg-slate-950/60 px-4 py-3 text-sm text-slate-100 placeholder:text-slate-500 focus:border-[color:var(--accent-color)] focus:outline-none focus:ring-2 focus:ring-[color:var(--accent-color)]/40"
                 />
                 <div className="flex items-center justify-between text-xs text-slate-400">
-                  <span>
-                    Colors update live based on GPT-5 suggestions.
-                  </span>
+                  <span>Colors update live based on GPT-5 suggestions.</span>
                   <Button type="submit" disabled={isLoading} size="sm">
                     {isLoading ? (
                       <>
@@ -273,7 +285,10 @@ export default function GenerativeUIPage(): JSX.Element {
               {["primary", "accent", "background", "text"].map((key) => {
                 const value = (theme as Record<string, string>)[key];
                 return (
-                  <div key={key} className="rounded-xl border border-white/10 bg-slate-950/80 p-3">
+                  <div
+                    key={key}
+                    className="rounded-xl border border-white/10 bg-slate-950/80 p-3"
+                  >
                     <div className="flex items-center justify-between text-[0.7rem] uppercase tracking-wide text-slate-400">
                       <span>{key}</span>
                       <span className="font-mono text-slate-300">{value}</span>

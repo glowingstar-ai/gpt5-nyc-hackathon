@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useCallback, useEffect, useState } from "react";
 
 const INVITE_CODE = "chenyu";
@@ -46,6 +46,7 @@ const UNPROTECTED_PATHS = new Set<string>(["/"]);
 
 export function InviteGate({ children }: InviteGateProps) {
   const pathname = usePathname();
+  const router = useRouter();
   const shouldProtect = pathname ? !UNPROTECTED_PATHS.has(pathname) : false;
   const [status, setStatus] = useState<InviteStatus>("loading");
   const [codeInput, setCodeInput] = useState("");
@@ -110,7 +111,9 @@ export function InviteGate({ children }: InviteGateProps) {
       setWaitlistMessage(null);
 
       if (!waitlistEmail.trim()) {
-        setWaitlistMessage("Please enter an email address to join the waitlist.");
+        setWaitlistMessage(
+          "Please enter an email address to join the waitlist."
+        );
         return;
       }
 
@@ -121,6 +124,10 @@ export function InviteGate({ children }: InviteGateProps) {
     },
     [waitlistEmail]
   );
+
+  const handleBackToLanding = useCallback(() => {
+    router.push("/");
+  }, [router]);
 
   if (!shouldProtect) {
     return <>{children}</>;
@@ -139,6 +146,27 @@ export function InviteGate({ children }: InviteGateProps) {
       {status !== "granted" && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="mx-4 w-full max-w-md rounded-3xl border border-white/10 bg-white/95 p-8 text-left shadow-2xl shadow-black/40 backdrop-blur-lg dark:border-white/10 dark:bg-zinc-900/90">
+            {/* Back button */}
+            <button
+              onClick={handleBackToLanding}
+              className="mb-4 flex items-center gap-2 text-sm text-zinc-600 transition-colors hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+            >
+              <svg
+                className="h-4 w-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                xmlns="http://www.w3.org/2000/svg"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M15 19l-7-7 7-7"
+                />
+              </svg>
+              Back to landing page
+            </button>
             {status === "loading" ? (
               <div className="flex flex-col items-center gap-4 text-center text-zinc-700 dark:text-zinc-200">
                 <div className="h-12 w-12 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
@@ -151,12 +179,16 @@ export function InviteGate({ children }: InviteGateProps) {
                     Enter Invitation Code
                   </h1>
                   <p className="text-sm text-zinc-600 dark:text-zinc-300">
-                    We&apos;re currently in a private beta. Please enter your invitation code to continue.
+                    We&apos;re currently in a private beta. Please enter your
+                    invitation code to continue.
                   </p>
                 </div>
 
                 <form className="space-y-3" onSubmit={handleCodeSubmit}>
-                  <label className="block text-sm font-medium text-zinc-700 dark:text-zinc-200" htmlFor="invite-code">
+                  <label
+                    className="block text-sm font-medium text-zinc-700 dark:text-zinc-200"
+                    htmlFor="invite-code"
+                  >
                     Invitation code
                   </label>
                   <input
@@ -184,7 +216,8 @@ export function InviteGate({ children }: InviteGateProps) {
                 <div className="space-y-3 rounded-2xl bg-zinc-100/70 p-4 text-sm text-zinc-700 dark:bg-zinc-800/80 dark:text-zinc-200">
                   <p className="font-medium">Don&apos;t have a code yet?</p>
                   <p>
-                    Join the waitlist and we&apos;ll reach out as soon as new private beta spots open up.
+                    Join the waitlist and we&apos;ll reach out as soon as new
+                    private beta spots open up.
                   </p>
                   <form className="space-y-2" onSubmit={handleWaitlistSubmit}>
                     <label className="sr-only" htmlFor="waitlist-email">
@@ -206,7 +239,11 @@ export function InviteGate({ children }: InviteGateProps) {
                       Join the waitlist
                     </button>
                   </form>
-                  {waitlistMessage && <p className="text-xs text-indigo-500 dark:text-indigo-300">{waitlistMessage}</p>}
+                  {waitlistMessage && (
+                    <p className="text-xs text-indigo-500 dark:text-indigo-300">
+                      {waitlistMessage}
+                    </p>
+                  )}
                 </div>
               </div>
             )}

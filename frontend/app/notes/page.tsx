@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useMemo, useRef, useState } from "react";
-import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
+import WorkspaceBanner from "@/components/workspace-banner";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
@@ -146,18 +146,7 @@ export default function NotesPage(): JSX.Element {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-800 bg-slate-900/60 backdrop-blur">
-        <div className="mx-auto flex max-w-4xl items-center justify-between px-6 py-4">
-          <h1 className="text-xl font-semibold">AI Notes Workspace</h1>
-          <nav className="space-x-4 text-sm text-slate-400">
-            <Link href="/" className="hover:text-slate-100">
-              Home
-            </Link>
-            <span className="text-slate-700">/</span>
-            <span className="text-slate-100">Notes</span>
-          </nav>
-        </div>
-      </header>
+      <WorkspaceBanner title="AI Notes Workspace" current="Notes" />
 
       <main className="mx-auto flex max-w-4xl flex-col gap-8 px-6 py-10">
         <section className="rounded-lg border border-slate-800 bg-slate-900/60 p-6 shadow-lg">

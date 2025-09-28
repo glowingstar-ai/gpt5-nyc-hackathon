@@ -9,12 +9,15 @@ from typing import Any
 import httpx
 
 from app.schemas.tutor import (
+    TutorConversationManager,
     TutorAssessmentItem,
     TutorAssessmentPlan,
     TutorCompletionPlan,
     TutorConceptBreakdown,
+    TutorLearningStage,
     TutorModeRequest,
     TutorModeResponse,
+    TutorStageQuiz,
     TutorTeachingModality,
     TutorUnderstandingPlan,
 )
@@ -53,9 +56,11 @@ class TutorModeService:
 
         prompt = dedent(
             f"""
-            You are BabyAGI operating in tutor mode and powered by {self.model}. The
-            student profile is described below. Produce a tutoring game plan as JSON
-            following the `tutor_plan` schema.
+            You are BabyAGI operating in tutor mode and powered by {self.model}. Act as the GPT-5
+            manager orchestrating sub-agents inside a single chat conversation. Use the student
+            profile below to create a JSON-only tutoring plan that extracts the topic, diagnoses
+            level with a beginner flag, routes through staged concepts, and loops in quizzes when
+            a learner needs remediation.
 
             Student profile:
             - Topic: {payload.topic}
@@ -72,13 +77,21 @@ class TutorModeService:
               "understanding": {{
                 "approach": string,
                 "diagnostic_questions": string array,
-                "signals_to_watch": string array
+                "signals_to_watch": string array,
+                "beginner_flag_logic": string,
+                "follow_up_questions": string array,
+                "max_follow_up_iterations": integer,
+                "escalation_strategy": string
               }},
               "concept_breakdown": array of {{
                 "concept": string,
                 "llm_reasoning": string,
                 "subtopics": string array,
-                "real_world_connections": string array
+                "real_world_connections": string array,
+                "prerequisites": string array,
+                "mastery_checks": string array,
+                "remediation_plan": string,
+                "advancement_cue": string
               }},
               "teaching_modalities": array of {{
                 "modality": string,
@@ -100,10 +113,33 @@ class TutorModeService:
                 "mastery_indicators": string array,
                 "wrap_up_plan": string,
                 "follow_up_suggestions": string array
+              }},
+              "conversation_manager": {{
+                "agent_role": string,
+                "topic_extraction_prompt": string,
+                "level_assessment_summary": string,
+                "containment_strategy": string
+              }},
+              "learning_stages": array of {{
+                "name": string,
+                "focus": string,
+                "objectives": string array,
+                "prerequisites": string array,
+                "pass_criteria": string array,
+                "quiz": {{
+                  "prompt": string,
+                  "answer_key": string or null,
+                  "remediation": string
+                }},
+                "on_success": string,
+                "on_failure": string
               }}
             }}
 
-            Ensure the plan emphasises human-in-the-loop checkpoints.
+            Explicitly detail how the manager keeps the dialogue inside the chat, confirms the
+            topic, and asks up to three follow-up questions when the beginner flag is False before
+            escalating. Ensure each learning stage clearly states how to progress only after passing
+            a quiz or mastery check, and how to remediate otherwise.
             """
         ).strip()
 
@@ -149,6 +185,8 @@ class TutorModeService:
             "teaching_modalities",
             "assessment",
             "completion",
+            "conversation_manager",
+            "learning_stages",
         }
         if not required_keys.issubset(response_json):
             return self._offline_plan(payload)
@@ -169,6 +207,25 @@ class TutorModeService:
         ]
         assessment = TutorAssessmentPlan(**assessment_payload, items=items)
         completion = TutorCompletionPlan(**response_json.get("completion", {}))
+        conversation_manager = TutorConversationManager(
+            **response_json.get("conversation_manager", {})
+        )
+        stages = []
+        for stage_payload in response_json.get("learning_stages", []):
+            quiz_payload = stage_payload.get("quiz", {})
+            quiz = TutorStageQuiz(**quiz_payload)
+            stages.append(
+                TutorLearningStage(
+                    name=stage_payload.get("name", "Stage"),
+                    focus=stage_payload.get("focus", ""),
+                    objectives=stage_payload.get("objectives", []),
+                    prerequisites=stage_payload.get("prerequisites", []),
+                    pass_criteria=stage_payload.get("pass_criteria", []),
+                    quiz=quiz,
+                    on_success=stage_payload.get("on_success", ""),
+                    on_failure=stage_payload.get("on_failure", ""),
+                )
+            )
 
         return TutorModeResponse(
             model=response_json.get("model", self.model),
@@ -181,6 +238,8 @@ class TutorModeService:
             teaching_modalities=modalities,
             assessment=assessment,
             completion=completion,
+            conversation_manager=conversation_manager,
+            learning_stages=stages,
         )
 
     def _offline_plan(self, payload: TutorModeRequest) -> TutorModeResponse:
@@ -201,6 +260,14 @@ class TutorModeService:
                 "Confidence when answering why/how questions",
                 "Ability to connect the topic to prior knowledge",
             ],
+            beginner_flag_logic="Mark beginner=True when the learner struggles to define foundational vocabulary or relies on guesses.",
+            follow_up_questions=[
+                f"Can you share an example of using {payload.topic}?",
+                "What related concepts have you studied before?",
+                "Where do you feel the biggest gap is right now?",
+            ],
+            max_follow_up_iterations=3,
+            escalation_strategy="After three probes, summarise what is known, state the provisional beginner flag, and explain the tailored path.",
         )
         concept_breakdown = [
             TutorConceptBreakdown(
@@ -215,6 +282,13 @@ class TutorModeService:
                     f"Everyday scenarios where {payload.topic} shows up",
                     "Analogies drawn from the learner's interests",
                 ],
+                prerequisites=["Baseline terminology", "Related prior knowledge from diagnostic"],
+                mastery_checks=[
+                    "Learner can outline the main steps without prompting",
+                    "Learner correctly answers a why/how follow-up",
+                ],
+                remediation_plan="Deliver a targeted quiz, revisit prerequisite vocabulary, and co-create a new example before retrying.",
+                advancement_cue="Celebrate with positive feedback and segue into the next subtopic via an applied challenge.",
             )
         ]
         modalities = [
@@ -263,6 +337,78 @@ class TutorModeService:
                 "Provide curated resources aligned with preferred modalities",
             ],
         )
+        conversation_manager = TutorConversationManager(
+            agent_role="You are the GPT-5 manager coordinating tutor sub-agents inside this chat.",
+            topic_extraction_prompt=(
+                f"Let's double-check: are we focusing on {payload.topic}? If not, ask the learner to clarify the exact topic."
+            ),
+            level_assessment_summary=(
+                "Set beginner_flag based on diagnostic signals. If False, ask follow-up questions sequentially (up to three) before committing."
+            ),
+            containment_strategy="Keep every clarification, assessment, and plan update inside this chat thread and narrate any agent hand-offs explicitly.",
+        )
+        learning_stages = [
+            TutorLearningStage(
+                name="Stage 1",
+                focus="Foundational vocabulary and framing",
+                objectives=[
+                    f"Define the essential terms associated with {payload.topic}",
+                    "Relate the concept to the learner's prior knowledge",
+                ],
+                prerequisites=["Beginner flag evaluated", "Diagnostic summary shared"],
+                pass_criteria=[
+                    "Learner restates the topic accurately",
+                    "Learner identifies at least one real-world application",
+                ],
+                quiz=TutorStageQuiz(
+                    prompt=f"Provide a simple scenario and ask the learner to identify how {payload.topic} applies.",
+                    answer_key="Look for alignment with the key vocabulary and accurate mapping to the scenario.",
+                    remediation="If incorrect, revisit the vocabulary with a new example and retry the quiz.",
+                ),
+                on_success="Acknowledge mastery and transition to applied practice.",
+                on_failure="Loop back to the remediation plan, then re-issue the quiz before advancing.",
+            ),
+            TutorLearningStage(
+                name="Stage 2",
+                focus="Applied practice",
+                objectives=[
+                    "Guide the learner through a multi-step problem",
+                    "Highlight decision points where misconceptions appear",
+                ],
+                prerequisites=["Stage 1 passed"],
+                pass_criteria=[
+                    "Learner solves the practice scenario with minimal scaffolding",
+                    "Learner explains the reasoning behind each step",
+                ],
+                quiz=TutorStageQuiz(
+                    prompt="Present a novel practice task and request a think-aloud solution.",
+                    answer_key="Solution should include the major steps and rational justification.",
+                    remediation="Break the task into micro-steps, model the first one, then have the learner continue.",
+                ),
+                on_success="Offer a celebratory recap and outline how the next stage will extend the concept.",
+                on_failure="Return to the misconception, model a corrected approach, and retry the quiz with a similar prompt.",
+            ),
+            TutorLearningStage(
+                name="Stage 3",
+                focus="Extension and transfer",
+                objectives=[
+                    "Challenge the learner with an open-ended question",
+                    "Encourage them to plan future practice or projects",
+                ],
+                prerequisites=["Stage 2 passed"],
+                pass_criteria=[
+                    "Learner proposes a creative application or extension",
+                    "Learner self-identifies next steps or lingering questions",
+                ],
+                quiz=TutorStageQuiz(
+                    prompt="Ask the learner to design a mini-quiz for someone else on this topic.",
+                    answer_key="Should include accurate questions and expected answers that reflect deep understanding.",
+                    remediation="Collaboratively draft one quiz question together, then let the learner complete the set.",
+                ),
+                on_success="Wrap up with the completion plan and encourage autonomy.",
+                on_failure="Diagnose gaps, revisit relevant prior stages, and co-create the quiz before another attempt.",
+            ),
+        ]
 
         return TutorModeResponse(
             model=self.model,
@@ -275,4 +421,6 @@ class TutorModeService:
             teaching_modalities=modalities,
             assessment=assessment,
             completion=completion,
+            conversation_manager=conversation_manager,
+            learning_stages=learning_stages,
         )

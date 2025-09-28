@@ -36,6 +36,22 @@ class TutorUnderstandingPlan(BaseModel):
     approach: str
     diagnostic_questions: list[str]
     signals_to_watch: list[str]
+    beginner_flag_logic: str = Field(
+        default="Classify the learner as a beginner when answers show limited prior knowledge.",
+        description="How the tutor converts qualitative signals into the beginner boolean flag",
+    )
+    follow_up_questions: list[str] = Field(
+        default_factory=list,
+        description="Additional probes asked when the learner is not a beginner",
+    )
+    max_follow_up_iterations: int = Field(
+        default=3,
+        description="Maximum number of iterations before moving on",
+    )
+    escalation_strategy: str = Field(
+        default="Summarise what you learned and explain how you will adapt the plan before continuing.",
+        description="What the tutor does if understanding remains unclear after follow ups",
+    )
 
 
 class TutorConceptBreakdown(BaseModel):
@@ -45,6 +61,22 @@ class TutorConceptBreakdown(BaseModel):
     llm_reasoning: str
     subtopics: list[str]
     real_world_connections: list[str]
+    prerequisites: list[str] = Field(
+        default_factory=list,
+        description="Concepts that must be mastered before this one",
+    )
+    mastery_checks: list[str] = Field(
+        default_factory=list,
+        description="Observable indicators that the learner is ready to advance",
+    )
+    remediation_plan: str = Field(
+        default="Offer a quick formative quiz and revisit the prerequisite concept with a new example.",
+        description="Action taken when mastery checks are not met",
+    )
+    advancement_cue: str = Field(
+        default="Acknowledge success and transition to the next concept with an applied challenge.",
+        description="How to celebrate/transition after a pass",
+    )
 
 
 class TutorTeachingModality(BaseModel):
@@ -73,6 +105,36 @@ class TutorAssessmentPlan(BaseModel):
     items: list[TutorAssessmentItem]
 
 
+class TutorConversationManager(BaseModel):
+    """High-level directives for the GPT-5 manager orchestrating the session."""
+
+    agent_role: str
+    topic_extraction_prompt: str
+    level_assessment_summary: str
+    containment_strategy: str
+
+
+class TutorStageQuiz(BaseModel):
+    """Quiz blueprint attached to a learning stage."""
+
+    prompt: str
+    answer_key: str | None = None
+    remediation: str
+
+
+class TutorLearningStage(BaseModel):
+    """Learning stage that enforces pass/fail progression rules."""
+
+    name: str
+    focus: str
+    objectives: list[str]
+    prerequisites: list[str]
+    pass_criteria: list[str]
+    quiz: TutorStageQuiz
+    on_success: str
+    on_failure: str
+
+
 class TutorCompletionPlan(BaseModel):
     """Step 4 – how the agent knows instruction is complete."""
 
@@ -94,3 +156,5 @@ class TutorModeResponse(BaseModel):
     teaching_modalities: list[TutorTeachingModality]
     assessment: TutorAssessmentPlan
     completion: TutorCompletionPlan
+    conversation_manager: TutorConversationManager
+    learning_stages: list[TutorLearningStage]

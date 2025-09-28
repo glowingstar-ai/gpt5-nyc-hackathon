@@ -69,12 +69,20 @@ type TutorModeResponse = {
     approach: string;
     diagnostic_questions: string[];
     signals_to_watch: string[];
+    beginner_flag_logic: string;
+    follow_up_questions: string[];
+    max_follow_up_iterations: number;
+    escalation_strategy: string;
   };
   concept_breakdown: {
     concept: string;
     llm_reasoning: string;
     subtopics: string[];
     real_world_connections: string[];
+    prerequisites: string[];
+    mastery_checks: string[];
+    remediation_plan: string;
+    advancement_cue: string;
   }[];
   teaching_modalities: {
     modality: TutorTeachingModalityKind;
@@ -97,6 +105,26 @@ type TutorModeResponse = {
     wrap_up_plan: string;
     follow_up_suggestions: string[];
   };
+  conversation_manager: {
+    agent_role: string;
+    topic_extraction_prompt: string;
+    level_assessment_summary: string;
+    containment_strategy: string;
+  };
+  learning_stages: {
+    name: string;
+    focus: string;
+    objectives: string[];
+    prerequisites: string[];
+    pass_criteria: string[];
+    quiz: {
+      prompt: string;
+      answer_key?: string | null;
+      remediation: string;
+    };
+    on_success: string;
+    on_failure: string;
+  }[];
 };
 
 function formatDate(value: string) {
@@ -146,7 +174,7 @@ export default function TutorModePage(): JSX.Element {
       return;
     }
 
-    setActiveStage("understanding");
+    setActiveStage("manager");
   }, [plan]);
 
   const handleToggleModality = useCallback((value: TutorTeachingModalityKind) => {
@@ -442,11 +470,39 @@ function StageMachine({ plan, activeStage, onStageChange }: StageMachineProps) {
   const stages = useMemo<StageConfig[]>(
     () => [
       {
-        id: "understanding",
+        id: "manager",
         stepNumber: 0,
+        title: "GPT-5 manager directives",
+        description: "Orchestrate agents, confirm the topic, and keep decisions in chat.",
+        icon: Compass,
+        accent: "text-amber-300",
+        content: (
+          <article className="space-y-4 rounded-xl border border-slate-800/70 bg-slate-950/60 p-4 text-sm text-slate-300 shadow-lg shadow-amber-500/10">
+            <div>
+              <h5 className="font-semibold text-slate-200">Agent role</h5>
+              <p className="mt-1">{plan.conversation_manager.agent_role}</p>
+            </div>
+            <div>
+              <h5 className="font-semibold text-slate-200">Topic extraction</h5>
+              <p className="mt-1">{plan.conversation_manager.topic_extraction_prompt}</p>
+            </div>
+            <div>
+              <h5 className="font-semibold text-slate-200">Level assessment summary</h5>
+              <p className="mt-1">{plan.conversation_manager.level_assessment_summary}</p>
+            </div>
+            <div>
+              <h5 className="font-semibold text-slate-200">Containment strategy</h5>
+              <p className="mt-1">{plan.conversation_manager.containment_strategy}</p>
+            </div>
+          </article>
+        ),
+      },
+      {
+        id: "understanding",
+        stepNumber: 1,
         title: "Understand the learner",
         description: "Assess readiness and calibrate tone.",
-        icon: Compass,
+        icon: GraduationCap,
         accent: "text-sky-300",
         content: (
           <div className="space-y-4 rounded-xl border border-slate-800/70 bg-slate-950/60 p-4 text-sm text-slate-300 shadow-lg shadow-sky-500/10">
@@ -477,12 +533,41 @@ function StageMachine({ plan, activeStage, onStageChange }: StageMachineProps) {
                 ))}
               </ul>
             </div>
+            <div>
+              <h5 className="font-semibold text-slate-200">Beginner flag logic</h5>
+              <p className="mt-1">{plan.understanding.beginner_flag_logic}</p>
+            </div>
+            {plan.understanding.follow_up_questions.length > 0 ? (
+              <div>
+                <h5 className="font-semibold text-slate-200">Follow-up when beginner is false</h5>
+                <ol className="mt-1 space-y-1 text-xs">
+                  {plan.understanding.follow_up_questions.map((question, index) => (
+                    <li
+                      key={`${question}-${index}`}
+                      className="rounded-md border border-slate-800/70 bg-slate-950/70 px-3 py-2"
+                    >
+                      <span className="font-semibold text-slate-300">Probe {index + 1}:</span> {question}
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            ) : null}
+            <div className="grid gap-3 text-xs md:grid-cols-2">
+              <div className="rounded-lg border border-slate-800/70 bg-slate-950/70 px-3 py-2">
+                <span className="font-semibold text-slate-200">Max follow-ups</span>
+                <p className="mt-1 text-slate-300">{plan.understanding.max_follow_up_iterations}</p>
+              </div>
+              <div className="rounded-lg border border-slate-800/70 bg-slate-950/70 px-3 py-2">
+                <span className="font-semibold text-slate-200">Escalation strategy</span>
+                <p className="mt-1 text-slate-300">{plan.understanding.escalation_strategy}</p>
+              </div>
+            </div>
           </div>
         ),
       },
       {
         id: "concepts",
-        stepNumber: 1,
+        stepNumber: 2,
         title: "Concept breakdowns",
         description: "Sequence the instructional narrative.",
         icon: BookOpen,
@@ -524,6 +609,120 @@ function StageMachine({ plan, activeStage, onStageChange }: StageMachineProps) {
                     ))}
                   </ul>
                 </div>
+                {concept.prerequisites.length > 0 ? (
+                  <div className="mt-3">
+                    <h6 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Prerequisites</h6>
+                    <ul className="mt-1 list-disc space-y-1 pl-5">
+                      {concept.prerequisites.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {concept.mastery_checks.length > 0 ? (
+                  <div className="mt-3">
+                    <h6 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Mastery checks</h6>
+                    <ul className="mt-1 space-y-1">
+                      {concept.mastery_checks.map((check) => (
+                        <li
+                          key={check}
+                          className="rounded-md border border-slate-800/70 bg-slate-950/70 px-3 py-2"
+                        >
+                          {check}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                <div className="mt-3 grid gap-3 md:grid-cols-2">
+                  <div className="rounded-lg border border-slate-800/70 bg-slate-950/70 px-3 py-2">
+                    <h6 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Remediation plan</h6>
+                    <p className="mt-1 text-xs text-slate-300">{concept.remediation_plan}</p>
+                  </div>
+                  <div className="rounded-lg border border-slate-800/70 bg-slate-950/70 px-3 py-2">
+                    <h6 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Advancement cue</h6>
+                    <p className="mt-1 text-xs text-slate-300">{concept.advancement_cue}</p>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        ),
+      },
+      {
+        id: "learning-stages",
+        stepNumber: 3,
+        title: "Progression gates",
+        description: "Advance only after passing quizzes and mastery checks.",
+        icon: Loader2,
+        accent: "text-emerald-300",
+        content: (
+          <div className="space-y-4">
+            {plan.learning_stages.map((stage) => (
+              <article
+                key={stage.name}
+                className="space-y-3 rounded-xl border border-slate-800/70 bg-slate-950/60 p-4 text-sm text-slate-300 shadow-lg shadow-emerald-500/10"
+              >
+                <header className="flex flex-col gap-1">
+                  <h5 className="text-base font-semibold text-slate-100">{stage.name}</h5>
+                  <p className="text-xs uppercase tracking-wide text-slate-400">{stage.focus}</p>
+                </header>
+                <div>
+                  <h6 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Objectives</h6>
+                  <ul className="mt-1 list-disc space-y-1 pl-5">
+                    {stage.objectives.map((objective) => (
+                      <li key={objective}>{objective}</li>
+                    ))}
+                  </ul>
+                </div>
+                {stage.prerequisites.length > 0 ? (
+                  <div>
+                    <h6 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Prerequisites</h6>
+                    <ul className="mt-1 flex flex-wrap gap-2 text-xs">
+                      {stage.prerequisites.map((item) => (
+                        <li
+                          key={item}
+                          className="rounded-full border border-slate-800/70 bg-slate-950/70 px-3 py-1"
+                        >
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                {stage.pass_criteria.length > 0 ? (
+                  <div>
+                    <h6 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Pass criteria</h6>
+                    <ul className="mt-1 space-y-1">
+                      {stage.pass_criteria.map((criteria) => (
+                        <li
+                          key={criteria}
+                          className="rounded-md border border-slate-800/70 bg-slate-950/70 px-3 py-2"
+                        >
+                          {criteria}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
+                <div>
+                  <h6 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Quiz checkpoint</h6>
+                  <p className="mt-1">{stage.quiz.prompt}</p>
+                  {stage.quiz.answer_key ? (
+                    <p className="mt-1 text-xs text-emerald-300">Answer key: {stage.quiz.answer_key}</p>
+                  ) : null}
+                  <p className="mt-2 text-xs text-slate-300">Remediation: {stage.quiz.remediation}</p>
+                </div>
+                <div className="grid gap-3 text-xs md:grid-cols-2">
+                  <div className="rounded-lg border border-slate-800/70 bg-slate-950/70 px-3 py-2">
+                    <h6 className="text-xs font-semibold uppercase tracking-wide text-slate-400">On success</h6>
+                    <p className="mt-1 text-slate-300">{stage.on_success}</p>
+                  </div>
+                  <div className="rounded-lg border border-slate-800/70 bg-slate-950/70 px-3 py-2">
+                    <h6 className="text-xs font-semibold uppercase tracking-wide text-slate-400">On failure</h6>
+                    <p className="mt-1 text-slate-300">{stage.on_failure}</p>
+                  </div>
+                </div>
               </article>
             ))}
           </div>
@@ -531,7 +730,7 @@ function StageMachine({ plan, activeStage, onStageChange }: StageMachineProps) {
       },
       {
         id: "modalities",
-        stepNumber: 2,
+        stepNumber: 4,
         title: "Teaching modalities",
         description: "Mix formats to keep momentum.",
         icon: Sparkles,
@@ -562,7 +761,7 @@ function StageMachine({ plan, activeStage, onStageChange }: StageMachineProps) {
       },
       {
         id: "assessment",
-        stepNumber: 3,
+        stepNumber: 5,
         title: "Assessment plan",
         description: "Check for understanding and depth.",
         icon: ClipboardList,
@@ -603,7 +802,7 @@ function StageMachine({ plan, activeStage, onStageChange }: StageMachineProps) {
       },
       {
         id: "completion",
-        stepNumber: 4,
+        stepNumber: 6,
         title: "Completion signals",
         description: "Lock in mastery and next steps.",
         icon: CheckCircle2,

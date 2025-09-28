@@ -306,7 +306,7 @@ export default function LandingPage(): JSX.Element {
             </div>
           </section>
 
-          <section id="features" className="space-y-8">
+          <section id="features" className="space-y-8 scroll-mt-28">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
               <div>
                 <p className="text-sm uppercase tracking-[0.35em] text-amber-200/80">Navigation</p>
@@ -319,7 +319,10 @@ export default function LandingPage(): JSX.Element {
                 the moment and follow the glow.
               </p>
             </div>
-            <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3" id="experiences">
+            <div
+              className="grid gap-6 scroll-mt-28 md:grid-cols-2 xl:grid-cols-3"
+              id="experiences"
+            >
               {featureCards.map((feature) => (
                 <Link key={feature.name} href={feature.href} className="group">
                   <div className="h-full rounded-3xl border border-white/10 bg-slate-950/60 p-6 shadow-lg shadow-amber-200/5 transition-transform duration-300 group-hover:-translate-y-1 group-hover:shadow-amber-300/30">
@@ -345,7 +348,7 @@ export default function LandingPage(): JSX.Element {
 
           <section
             id="why-glowing"
-            className="grid gap-10 rounded-3xl border border-white/10 bg-gradient-to-br from-slate-950 via-slate-900/80 to-slate-950 p-8 md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:p-12"
+            className="grid gap-10 scroll-mt-28 rounded-3xl border border-white/10 bg-gradient-to-br from-slate-950 via-slate-900/80 to-slate-950 p-8 md:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] md:p-12"
           >
             <div className="space-y-6">
               <p className="text-sm uppercase tracking-[0.4em] text-amber-200/80">Why teams choose A Glowing Star</p>

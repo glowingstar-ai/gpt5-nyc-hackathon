@@ -1,14 +1,21 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
-import type { FormEvent, SVGProps } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type KeyboardEvent,
+  type SVGProps,
+} from "react";
 import Link from "next/link";
 import {
   BookOpen,
   CheckCircle2,
   ClipboardList,
   Compass,
-  GraduationCap,
   Loader2,
   Sparkles,
 } from "lucide-react";
@@ -18,38 +25,46 @@ import { cn } from "@/lib/utils";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
-const MODALITY_OPTIONS = [
+const AGENTS = [
   {
-    value: "visual" as const,
-    label: "Visual",
-    description: "Diagrams, infographics, or whiteboard style walk-throughs.",
+    id: "manager",
+    name: "GPT-5 Manager",
+    tagline: "Coordinates the tutor galaxy and delegates work",
+    accent: "from-amber-500/70 via-orange-500/60 to-amber-400/80",
+    icon: Sparkles,
   },
   {
-    value: "verbal" as const,
-    label: "Verbal",
-    description: "Narrative explanations, analogies, or stories.",
+    id: "strategist",
+    name: "Curriculum Strategist",
+    tagline: "Designs the staged learning journey",
+    accent: "from-sky-500/70 via-cyan-500/60 to-blue-500/70",
+    icon: Compass,
   },
   {
-    value: "interactive" as const,
-    label: "Interactive",
-    description: "Hands-on coding, simulations, or explorations.",
+    id: "researcher",
+    name: "Modality Researcher",
+    tagline: "Curates resources and multi-modal explanations",
+    accent: "from-violet-500/70 via-fuchsia-500/60 to-purple-500/70",
+    icon: BookOpen,
   },
   {
-    value: "experiential" as const,
-    label: "Experiential",
-    description: "Real-world exercises, labs, or guided practice.",
+    id: "assessment",
+    name: "Assessment Architect",
+    tagline: "Builds mastery checks and feedback loops",
+    accent: "from-emerald-500/70 via-teal-500/60 to-green-500/70",
+    icon: ClipboardList,
   },
   {
-    value: "reading" as const,
-    label: "Reading",
-    description: "Curated articles, docs, or primary sources.",
+    id: "coach",
+    name: "Progress Coach",
+    tagline: "Monitors understanding and celebrates wins",
+    accent: "from-rose-500/70 via-pink-500/60 to-amber-500/70",
+    icon: CheckCircle2,
   },
-  {
-    value: "other" as const,
-    label: "Other",
-    description: "Something different—describe it in the context field.",
-  },
-];
+] as const;
+
+type AgentConfig = (typeof AGENTS)[number];
+type AgentId = AgentConfig["id"];
 
 type TutorTeachingModalityKind =
   | "visual"
@@ -127,6 +142,18 @@ type TutorModeResponse = {
   }[];
 };
 
+type AgentTask = {
+  agentId: AgentId;
+  headline: string;
+  tasks: string[];
+};
+
+type Message =
+  | { id: string; role: "user"; type: "text"; text: string }
+  | { id: string; role: AgentId; type: "text"; text: string }
+  | { id: string; role: AgentId; type: "tasks"; headline: string; tasks: string[] }
+  | { id: string; role: AgentId; type: "loading" };
+
 function formatDate(value: string) {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
@@ -139,796 +166,463 @@ function formatDate(value: string) {
   });
 }
 
-export default function TutorModePage(): JSX.Element {
-  const [topic, setTopic] = useState("Understanding diffusion transformers for creative coding");
-  const [studentLevel, setStudentLevel] = useState(
-    "Mid-level engineer comfortable with Python but new to generative AI models"
-  );
-  const [goalsInput, setGoalsInput] = useState(
-    [
-      "Decode the intuition behind diffusion and transformer hybrids",
-      "Build a mental model of the training process",
-      "Design a weekend project to apply the concept",
-    ].join("\n")
-  );
-  const [selectedModalities, setSelectedModalities] = useState<TutorTeachingModalityKind[]>([
-    "visual",
-    "interactive",
-  ]);
-  const [additionalContext, setAdditionalContext] = useState(
-    "I love analogies to music production and I learn fastest when I can tinker."
-  );
-  const [error, setError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [plan, setPlan] = useState<TutorModeResponse | null>(null);
-  const [activeStage, setActiveStage] = useState<string | null>(null);
+function buildAgentTasks(plan: TutorModeResponse): AgentTask[] {
+  const strategistTasks = plan.learning_stages.slice(0, 4).map((stage) => {
+    const criteriaPreview = stage.pass_criteria[0] ?? "keep the learner engaged";
+    return `Architect stage "${stage.name}" focused on ${stage.focus}. Prioritise: ${criteriaPreview}.`;
+  });
 
-  const formattedTimestamp = useMemo(() => {
-    if (!plan) return null;
-    return formatDate(plan.generated_at);
-  }, [plan]);
+  const modalityTasks = plan.teaching_modalities.slice(0, 4).map((modality) => {
+    const resourcePreview = modality.resources[0]
+      ? `Highlight ${modality.resources[0]}`
+      : "Select supporting resources";
+    return `Craft a ${modality.modality} experience: ${modality.description}. ${resourcePreview}.`;
+  });
+
+  const assessmentTasks = [
+    `Design the "${plan.assessment.title}" assessment (${plan.assessment.format}).`,
+    plan.assessment.human_in_the_loop_notes,
+    ...plan.assessment.items.slice(0, 3).map((item, index) => {
+      const label = index + 1;
+      return `Draft item ${label}: ${item.prompt}`;
+    }),
+  ];
+
+  const coachTasks = [
+    `Kick off with: ${plan.understanding.approach}.`,
+    plan.understanding.diagnostic_questions[0]
+      ? `Use diagnostic question: ${plan.understanding.diagnostic_questions[0]}`
+      : "Prepare diagnostic follow-ups.",
+    `Watch for: ${plan.understanding.signals_to_watch.slice(0, 2).join(", ")}.`,
+    `Wrap-up plan: ${plan.completion.wrap_up_plan}.`,
+  ];
+
+  const managerTasks = [
+    plan.conversation_manager.agent_role,
+    `Topic extraction focus: ${plan.conversation_manager.topic_extraction_prompt}.`,
+    `Level insights: ${plan.conversation_manager.level_assessment_summary}.`,
+    `Containment strategy: ${plan.conversation_manager.containment_strategy}.`,
+  ];
+
+  return [
+    {
+      agentId: "manager",
+      headline: "Coordinate the tutoring collective",
+      tasks: managerTasks,
+    },
+    {
+      agentId: "strategist",
+      headline: "Design the learning journey",
+      tasks: strategistTasks.length > 0
+        ? strategistTasks
+        : ["Outline staged progression to cover the concept effectively."],
+    },
+    {
+      agentId: "researcher",
+      headline: "Curate multi-modal experiences",
+      tasks: modalityTasks.length > 0
+        ? modalityTasks
+        : ["Select supporting resources and craft explanations across modalities."],
+    },
+    {
+      agentId: "assessment",
+      headline: "Engineer mastery checks",
+      tasks: assessmentTasks.length > 0
+        ? assessmentTasks
+        : ["Build assessments that surface understanding and misconceptions."],
+    },
+    {
+      agentId: "coach",
+      headline: "Coach the learner through the plan",
+      tasks: coachTasks.length > 0
+        ? coachTasks
+        : ["Monitor understanding signals and celebrate progress."],
+    },
+  ];
+}
+
+function AgentGlyph({ className, ...props }: SVGProps<SVGSVGElement>) {
+  return <Sparkles className={cn("h-4 w-4", className)} {...props} />;
+}
+
+export default function TutorModePage(): JSX.Element {
+  const [inputValue, setInputValue] = useState("");
+  const [messages, setMessages] = useState<Message[]>([
+    {
+      id: "welcome",
+      role: "manager",
+      type: "text",
+      text: "Hey there! I'm the GPT-5 tutor manager. What would you love to learn or get unstuck on today?",
+    },
+  ]);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [latestPlan, setLatestPlan] = useState<TutorModeResponse | null>(null);
+  const [assignmentBoard, setAssignmentBoard] = useState<AgentTask[]>([]);
+  const chatViewportRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (!plan) {
-      setActiveStage(null);
-      return;
+    if (!chatViewportRef.current) return;
+    chatViewportRef.current.scrollTop = chatViewportRef.current.scrollHeight;
+  }, [messages]);
+
+  const formattedTimestamp = useMemo(() => {
+    if (!latestPlan) return null;
+    return formatDate(latestPlan.generated_at);
+  }, [latestPlan]);
+
+  const handleKeyDown = useCallback((event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      event.currentTarget.form?.requestSubmit();
     }
-
-    setActiveStage("manager");
-  }, [plan]);
-
-  const handleToggleModality = useCallback((value: TutorTeachingModalityKind) => {
-    setSelectedModalities((previous) =>
-      previous.includes(value)
-        ? previous.filter((item) => item !== value)
-        : [...previous, value]
-    );
   }, []);
 
   const handleSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
       event.preventDefault();
-      if (!topic.trim()) {
-        setError("Please add a topic you want to explore with the tutor.");
+      const trimmed = inputValue.trim();
+      if (!trimmed) {
         return;
       }
 
-      setError(null);
-      setIsSubmitting(true);
-      setPlan(null);
-
-      const payload: Record<string, unknown> = {
-        topic: topic.trim(),
+      const userMessage: Message = {
+        id: `user-${Date.now()}`,
+        role: "user",
+        type: "text",
+        text: trimmed,
       };
 
-      if (studentLevel.trim()) {
-        payload["student_level"] = studentLevel.trim();
-      }
+      const placeholderId = `loading-${Date.now()}`;
 
-      const goals = goalsInput
-        .split("\n")
-        .map((goal) => goal.trim())
-        .filter(Boolean);
-      if (goals.length > 0) {
-        payload["goals"] = goals;
-      }
-
-      if (selectedModalities.length > 0) {
-        payload["preferred_modalities"] = selectedModalities;
-      }
-
-      if (additionalContext.trim()) {
-        payload["additional_context"] = additionalContext.trim();
-      }
+      setMessages((previous) => [
+        ...previous,
+        userMessage,
+        { id: placeholderId, role: "manager", type: "loading" },
+      ]);
+      setInputValue("");
+      setIsSubmitting(true);
 
       try {
         const response = await fetch(`${API_BASE}/tutor/mode`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          body: JSON.stringify({
+            topic: trimmed,
+            student_level: null,
+            goals: null,
+            preferred_modalities: null,
+            additional_context: "Generated from tutor-mode chat interface",
+          }),
         });
 
         if (!response.ok) {
-          const message = await response.text();
-          throw new Error(message || "Unable to generate a tutor plan right now.");
+          throw new Error("Unable to generate a tutor plan right now.");
         }
 
         const data: TutorModeResponse = await response.json();
-        setPlan(data);
-      } catch (err) {
-        console.error(err);
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Something went wrong while generating your tutor mode plan."
+        const tasks = buildAgentTasks(data);
+
+        setLatestPlan(data);
+        setAssignmentBoard(tasks);
+
+        setMessages((previous) =>
+          previous.flatMap((message) => {
+            if (message.id !== placeholderId) {
+              return [message];
+            }
+
+            const managerSummary: Message = {
+              id: `manager-summary-${Date.now()}`,
+              role: "manager",
+              type: "text",
+              text: `Deploying ${tasks.length} specialist agents to help you master "${data.topic}". Here's how we're dividing the work:`,
+            };
+
+            const taskMessages: Message[] = tasks.map((task, index) => ({
+              id: `${task.agentId}-${Date.now()}-${index}`,
+              role: task.agentId,
+              type: "tasks",
+              headline: task.headline,
+              tasks: task.tasks,
+            }));
+
+            return [managerSummary, ...taskMessages];
+          })
+        );
+      } catch (error) {
+        console.error("Tutor mode request failed", error);
+        setMessages((previous) =>
+          previous.map((message) =>
+            message.id === placeholderId
+              ? {
+                  id: `error-${Date.now()}`,
+                  role: "manager",
+                  type: "text",
+                  text: "I ran into an issue reaching the tutor service. Let's try that again in a moment.",
+                }
+              : message
+          )
         );
       } finally {
         setIsSubmitting(false);
       }
     },
-    [additionalContext, goalsInput, selectedModalities, studentLevel, topic]
+    [inputValue]
   );
 
+  const renderMessage = useCallback((message: Message) => {
+    if (message.role === "user") {
+      return (
+        <div key={message.id} className="flex justify-end">
+          <div className="max-w-[80%] rounded-2xl bg-sky-500/20 px-4 py-3 text-sm leading-relaxed text-sky-100 shadow-lg shadow-sky-500/10">
+            {message.text}
+          </div>
+        </div>
+      );
+    }
+
+    const agent = AGENTS.find((item) => item.id === message.role);
+    const Icon = agent?.icon ?? AgentGlyph;
+
+    if (message.type === "loading") {
+      return (
+        <div key={message.id} className="flex items-start gap-3">
+          <div className="mt-1 flex h-10 w-10 items-center justify-center rounded-full bg-slate-800/70 text-slate-200">
+            <Loader2 className="h-5 w-5 animate-spin" />
+          </div>
+          <div className="flex-1 rounded-2xl border border-slate-800/60 bg-slate-900/60 px-4 py-3 text-sm text-slate-300">
+            Coordinating agents…
+          </div>
+        </div>
+      );
+    }
+
+    if (message.type === "text") {
+      return (
+        <div key={message.id} className="flex items-start gap-3">
+          <div
+            className={cn(
+              "mt-1 flex h-10 w-10 items-center justify-center rounded-full border border-slate-700/60 bg-slate-900",
+              agent ? "text-white" : "text-slate-200"
+            )}
+          >
+            <Icon className="h-5 w-5" />
+          </div>
+          <div className="flex-1 rounded-2xl border border-slate-800/60 bg-slate-900/60 px-4 py-3 text-sm leading-relaxed text-slate-200">
+            {message.text}
+          </div>
+        </div>
+      );
+    }
+
+    if (message.type === "tasks") {
+      return (
+        <div key={message.id} className="flex items-start gap-3">
+          <div
+            className={cn(
+              "mt-1 flex h-10 w-10 items-center justify-center rounded-full border border-slate-700/60 bg-slate-900",
+              agent ? "text-white" : "text-slate-200"
+            )}
+          >
+            <Icon className="h-5 w-5" />
+          </div>
+          <div className="flex-1 rounded-2xl border border-slate-800/70 bg-slate-900/70 px-4 py-4 text-sm text-slate-100 shadow-lg shadow-slate-900/30">
+            <p className="text-sm font-semibold text-white">{message.headline}</p>
+            <ul className="mt-3 space-y-2 text-left text-sm text-slate-200">
+              {message.tasks.map((task, index) => (
+                <li key={index} className="flex items-start gap-2">
+                  <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-400" />
+                  <span>{task}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      );
+    }
+
+    return null;
+  }, []);
+
   return (
-    <div className="min-h-screen bg-slate-950 text-slate-100">
-      <header className="border-b border-slate-900/60 bg-slate-950/80 backdrop-blur">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-5">
-          <div className="space-y-1">
-            <h1 className="text-xl font-semibold">Tutor Mode Studio</h1>
-            <p className="text-sm text-slate-400">
-              Compose a rich learner brief and watch GPT-5 draft a multi-step instruction plan.
+    <div className="min-h-screen bg-slate-950 pb-16 text-slate-100">
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 pb-12 pt-10 lg:px-6">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-semibold uppercase tracking-widest text-slate-400">
+              Tutor mode (beta)
+            </p>
+            <h1 className="mt-2 text-3xl font-semibold text-white sm:text-4xl">
+              Ask the GPT-5 tutor collective anything
+            </h1>
+            <p className="mt-3 max-w-2xl text-sm text-slate-300">
+              Describe what you want to learn and watch the manager agent rally a crew of specialists to design a personalised path.
             </p>
           </div>
-          <nav className="text-sm text-slate-400">
-            <Link href="/" className="hover:text-slate-100">
-              Home
+          <div className="hidden shrink-0 md:block">
+            <Link href="/">
+              <Button variant="ghost" className="border border-slate-800 bg-slate-900/60 text-slate-200">
+                Back home
+              </Button>
             </Link>
-            <span className="mx-2 text-slate-700">/</span>
-            <span className="text-slate-100">Tutor Mode</span>
-          </nav>
+          </div>
         </div>
-      </header>
 
-      <main className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-6 py-10 lg:flex-row">
-        <section className="w-full space-y-6 rounded-xl border border-slate-800/70 bg-slate-900/60 p-6 shadow-2xl shadow-slate-950/40 backdrop-blur">
-          <div className="flex items-start justify-between gap-4">
+        <section className="rounded-3xl border border-slate-900/70 bg-slate-900/40 p-6 shadow-xl shadow-emerald-500/10">
+          <div className="flex items-center justify-between gap-4">
             <div>
-              <h2 className="text-lg font-semibold text-slate-100">Learner profile</h2>
-              <p className="mt-1 text-sm text-slate-400">
-                Share context about the learner, their objectives, and how they like to absorb new concepts.
-              </p>
-            </div>
-            <Sparkles className="h-5 w-5 text-amber-300" />
-          </div>
-
-          <form className="space-y-6" onSubmit={handleSubmit}>
-            <div className="space-y-2">
-              <label htmlFor="topic" className="text-sm font-medium text-slate-200">
-                What should the tutor cover?
-              </label>
-              <input
-                id="topic"
-                name="topic"
-                value={topic}
-                onChange={(event) => setTopic(event.target.value)}
-                required
-                placeholder="Explain diffusion transformers for generative media"
-                className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-300/40"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label htmlFor="studentLevel" className="text-sm font-medium text-slate-200">
-                Who is the learner?
-              </label>
-              <textarea
-                id="studentLevel"
-                name="studentLevel"
-                rows={3}
-                value={studentLevel}
-                onChange={(event) => setStudentLevel(event.target.value)}
-                placeholder="Describe their current level, strengths, or prior knowledge."
-                className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm leading-6 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-300/40"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <label htmlFor="goals" className="text-sm font-medium text-slate-200">
-                What outcomes matter most?
-              </label>
-              <textarea
-                id="goals"
-                name="goals"
-                rows={4}
-                value={goalsInput}
-                onChange={(event) => setGoalsInput(event.target.value)}
-                placeholder={"List goals on separate lines, e.g.\n• Understand the fundamentals\n• Apply with a hands-on build"}
-                className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm leading-6 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-300/40"
-              />
-            </div>
-
-            <fieldset className="space-y-3">
-              <legend className="text-sm font-medium text-slate-200">
-                Which teaching modalities resonate?
-              </legend>
-              <div className="grid gap-3 sm:grid-cols-2">
-                {MODALITY_OPTIONS.map((option) => {
-                  const isActive = selectedModalities.includes(option.value);
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => handleToggleModality(option.value)}
-                      className={cn(
-                        "rounded-lg border px-4 py-3 text-left transition",
-                        isActive
-                          ? "border-amber-300/70 bg-amber-300/10 text-amber-100"
-                          : "border-slate-800/80 bg-slate-950 text-slate-300 hover:border-amber-200/50 hover:text-amber-50"
-                      )}
-                    >
-                      <div className="text-sm font-semibold">{option.label}</div>
-                      <p className="mt-1 text-xs text-slate-400">
-                        {option.description}
-                      </p>
-                    </button>
-                  );
-                })}
-              </div>
-            </fieldset>
-
-            <div className="space-y-2">
-              <label htmlFor="context" className="text-sm font-medium text-slate-200">
-                Anything else the tutor should know?
-              </label>
-              <textarea
-                id="context"
-                name="context"
-                rows={3}
-                value={additionalContext}
-                onChange={(event) => setAdditionalContext(event.target.value)}
-                placeholder="Share constraints, analogies they love, or pacing preferences."
-                className="w-full rounded-lg border border-slate-800 bg-slate-950 px-3 py-2 text-sm leading-6 outline-none transition focus:border-amber-400 focus:ring-2 focus:ring-amber-300/40"
-              />
-            </div>
-
-            {error ? (
-              <div className="rounded-lg border border-rose-500/40 bg-rose-500/10 px-3 py-2 text-sm text-rose-100">
-                {error}
-              </div>
-            ) : null}
-
-            <Button
-              type="submit"
-              className="w-full bg-amber-300/90 text-slate-950 hover:bg-amber-200"
-              disabled={isSubmitting}
-            >
-              {isSubmitting ? (
-                <span className="flex items-center justify-center gap-2">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Generating tutor plan…
-                </span>
-              ) : (
-                "Generate tutor plan"
-              )}
-            </Button>
-          </form>
-        </section>
-
-        <section className="w-full rounded-xl border border-slate-800/70 bg-slate-900/40 p-6 shadow-xl shadow-slate-950/40 backdrop-blur">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-semibold text-slate-100">Tutor blueprint</h2>
-              <p className="mt-1 text-sm text-slate-400">
-                The agent orchestrates understanding checks, concept arcs, and completion signals.
-              </p>
-            </div>
-            <ClipboardList className="h-5 w-5 text-emerald-300" />
-          </div>
-
-          {!plan ? (
-            <div className="mt-8 space-y-4 rounded-lg border border-dashed border-slate-800/80 bg-slate-950/40 p-6 text-center">
-              <GraduationCap className="mx-auto h-10 w-10 text-slate-600" />
-              <p className="text-sm text-slate-400">
-                Submit a learner profile to receive a step-by-step tutor mode playbook.
-              </p>
-            </div>
-          ) : (
-            <div className="mt-6 space-y-6">
-              <div className="rounded-lg border border-slate-800/70 bg-slate-950/60 p-4">
-                <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm text-slate-300">
-                  <span className="inline-flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-amber-300" />
-                    {plan.model}
-                  </span>
-                  {formattedTimestamp ? (
-                    <span className="inline-flex items-center gap-2 text-slate-400">
-                      <ClockIcon className="h-4 w-4" />
-                      {formattedTimestamp}
-                    </span>
-                  ) : null}
-                </div>
-                <h3 className="mt-3 text-lg font-semibold text-slate-100">{plan.topic}</h3>
-                <p className="mt-2 text-sm text-slate-300">{plan.learner_profile}</p>
-                <div className="mt-4">
-                  <h4 className="text-sm font-semibold text-slate-200">Objectives</h4>
-                  <ul className="mt-2 space-y-1 text-sm text-slate-300">
-                    {plan.objectives.map((objective) => (
-                      <li key={objective} className="flex items-start gap-2">
-                        <CheckCircle2 className="mt-0.5 h-4 w-4 text-emerald-300" />
-                        <span>{objective}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-              <StageMachine plan={plan} activeStage={activeStage} onStageChange={setActiveStage} />
-            </div>
-          )}
-        </section>
-      </main>
-    </div>
-  );
-}
-
-type StageMachineProps = {
-  plan: TutorModeResponse;
-  activeStage: string | null;
-  onStageChange: (stageId: string) => void;
-};
-
-type StageConfig = {
-  id: string;
-  stepNumber: number;
-  title: string;
-  description: string;
-  icon: (props: SVGProps<SVGSVGElement>) => JSX.Element;
-  accent: string;
-  content: JSX.Element;
-};
-
-function StageMachine({ plan, activeStage, onStageChange }: StageMachineProps) {
-  const stages = useMemo<StageConfig[]>(
-    () => [
-      {
-        id: "manager",
-        stepNumber: 0,
-        title: "GPT-5 manager directives",
-        description: "Orchestrate agents, confirm the topic, and keep decisions in chat.",
-        icon: Compass,
-        accent: "text-amber-300",
-        content: (
-          <article className="space-y-4 rounded-xl border border-slate-800/70 bg-slate-950/60 p-4 text-sm text-slate-300 shadow-lg shadow-amber-500/10">
-            <div>
-              <h5 className="font-semibold text-slate-200">Agent role</h5>
-              <p className="mt-1">{plan.conversation_manager.agent_role}</p>
-            </div>
-            <div>
-              <h5 className="font-semibold text-slate-200">Topic extraction</h5>
-              <p className="mt-1">{plan.conversation_manager.topic_extraction_prompt}</p>
-            </div>
-            <div>
-              <h5 className="font-semibold text-slate-200">Level assessment summary</h5>
-              <p className="mt-1">{plan.conversation_manager.level_assessment_summary}</p>
-            </div>
-            <div>
-              <h5 className="font-semibold text-slate-200">Containment strategy</h5>
-              <p className="mt-1">{plan.conversation_manager.containment_strategy}</p>
-            </div>
-          </article>
-        ),
-      },
-      {
-        id: "understanding",
-        stepNumber: 1,
-        title: "Understand the learner",
-        description: "Assess readiness and calibrate tone.",
-        icon: GraduationCap,
-        accent: "text-sky-300",
-        content: (
-          <div className="space-y-4 rounded-xl border border-slate-800/70 bg-slate-950/60 p-4 text-sm text-slate-300 shadow-lg shadow-sky-500/10">
-            <div>
-              <h5 className="font-semibold text-slate-200">Approach</h5>
-              <p className="mt-1">{plan.understanding.approach}</p>
-            </div>
-            <div>
-              <h5 className="font-semibold text-slate-200">Diagnostic questions</h5>
-              <ul className="mt-1 space-y-1">
-                {plan.understanding.diagnostic_questions.map((question) => (
-                  <li key={question} className="rounded-md border border-slate-800/70 bg-slate-950/60 px-3 py-2">
-                    {question}
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div>
-              <h5 className="font-semibold text-slate-200">Signals to watch</h5>
-              <ul className="mt-1 flex flex-wrap gap-2 text-xs">
-                {plan.understanding.signals_to_watch.map((signal) => (
-                  <li
-                    key={signal}
-                    className="rounded-full border border-slate-800/70 bg-slate-950/80 px-3 py-1 text-slate-300"
-                  >
-                    {signal}
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div>
-              <h5 className="font-semibold text-slate-200">Beginner flag logic</h5>
-              <p className="mt-1">{plan.understanding.beginner_flag_logic}</p>
-            </div>
-            {plan.understanding.follow_up_questions.length > 0 ? (
-              <div>
-                <h5 className="font-semibold text-slate-200">Follow-up when beginner is false</h5>
-                <ol className="mt-1 space-y-1 text-xs">
-                  {plan.understanding.follow_up_questions.map((question, index) => (
-                    <li
-                      key={`${question}-${index}`}
-                      className="rounded-md border border-slate-800/70 bg-slate-950/70 px-3 py-2"
-                    >
-                      <span className="font-semibold text-slate-300">Probe {index + 1}:</span> {question}
-                    </li>
-                  ))}
-                </ol>
-              </div>
-            ) : null}
-            <div className="grid gap-3 text-xs md:grid-cols-2">
-              <div className="rounded-lg border border-slate-800/70 bg-slate-950/70 px-3 py-2">
-                <span className="font-semibold text-slate-200">Max follow-ups</span>
-                <p className="mt-1 text-slate-300">{plan.understanding.max_follow_up_iterations}</p>
-              </div>
-              <div className="rounded-lg border border-slate-800/70 bg-slate-950/70 px-3 py-2">
-                <span className="font-semibold text-slate-200">Escalation strategy</span>
-                <p className="mt-1 text-slate-300">{plan.understanding.escalation_strategy}</p>
-              </div>
+              <p className="text-xs uppercase tracking-[0.3em] text-slate-400">Agent constellation</p>
+              <h2 className="mt-2 text-xl font-semibold text-white">Meet your tutor specialists</h2>
             </div>
           </div>
-        ),
-      },
-      {
-        id: "concepts",
-        stepNumber: 2,
-        title: "Concept breakdowns",
-        description: "Sequence the instructional narrative.",
-        icon: BookOpen,
-        accent: "text-indigo-300",
-        content: (
-          <div className="space-y-4">
-            {plan.concept_breakdown.map((concept) => (
-              <article
-                key={`${concept.concept}-${concept.llm_reasoning.slice(0, 12)}`}
-                className="rounded-xl border border-slate-800/70 bg-slate-950/60 p-4 text-sm text-slate-300 shadow-lg shadow-indigo-500/10"
+          <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+            {AGENTS.map((agent) => (
+              <div
+                key={agent.id}
+                className="relative overflow-hidden rounded-2xl border border-slate-800/70 bg-slate-950/40 p-5 shadow-lg shadow-slate-950/40"
               >
-                <h5 className="text-base font-semibold text-slate-100">{concept.concept}</h5>
-                <p className="mt-1 text-slate-300">{concept.llm_reasoning}</p>
-                <div className="mt-3">
-                  <h6 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Subtopics</h6>
-                  <ul className="mt-1 flex flex-wrap gap-2 text-xs">
-                    {concept.subtopics.map((topic) => (
-                      <li
-                        key={topic}
-                        className="rounded-full border border-slate-800/70 bg-slate-950/80 px-3 py-1"
-                      >
-                        {topic}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                <div className="mt-3">
-                  <h6 className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                    Real-world connections
-                  </h6>
-                  <ul className="mt-1 space-y-1">
-                    {concept.real_world_connections.map((connection) => (
-                      <li
-                        key={connection}
-                        className="rounded-md border border-slate-800/70 bg-slate-950/70 px-3 py-2"
-                      >
-                        {connection}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-                {concept.prerequisites.length > 0 ? (
-                  <div className="mt-3">
-                    <h6 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Prerequisites</h6>
-                    <ul className="mt-1 list-disc space-y-1 pl-5">
-                      {concept.prerequisites.map((item) => (
-                        <li key={item}>{item}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-                {concept.mastery_checks.length > 0 ? (
-                  <div className="mt-3">
-                    <h6 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Mastery checks</h6>
-                    <ul className="mt-1 space-y-1">
-                      {concept.mastery_checks.map((check) => (
-                        <li
-                          key={check}
-                          className="rounded-md border border-slate-800/70 bg-slate-950/70 px-3 py-2"
-                        >
-                          {check}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-                <div className="mt-3 grid gap-3 md:grid-cols-2">
-                  <div className="rounded-lg border border-slate-800/70 bg-slate-950/70 px-3 py-2">
-                    <h6 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Remediation plan</h6>
-                    <p className="mt-1 text-xs text-slate-300">{concept.remediation_plan}</p>
-                  </div>
-                  <div className="rounded-lg border border-slate-800/70 bg-slate-950/70 px-3 py-2">
-                    <h6 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Advancement cue</h6>
-                    <p className="mt-1 text-xs text-slate-300">{concept.advancement_cue}</p>
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-        ),
-      },
-      {
-        id: "learning-stages",
-        stepNumber: 3,
-        title: "Progression gates",
-        description: "Advance only after passing quizzes and mastery checks.",
-        icon: Loader2,
-        accent: "text-emerald-300",
-        content: (
-          <div className="space-y-4">
-            {plan.learning_stages.map((stage) => (
-              <article
-                key={stage.name}
-                className="space-y-3 rounded-xl border border-slate-800/70 bg-slate-950/60 p-4 text-sm text-slate-300 shadow-lg shadow-emerald-500/10"
-              >
-                <header className="flex flex-col gap-1">
-                  <h5 className="text-base font-semibold text-slate-100">{stage.name}</h5>
-                  <p className="text-xs uppercase tracking-wide text-slate-400">{stage.focus}</p>
-                </header>
-                <div>
-                  <h6 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Objectives</h6>
-                  <ul className="mt-1 list-disc space-y-1 pl-5">
-                    {stage.objectives.map((objective) => (
-                      <li key={objective}>{objective}</li>
-                    ))}
-                  </ul>
-                </div>
-                {stage.prerequisites.length > 0 ? (
-                  <div>
-                    <h6 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Prerequisites</h6>
-                    <ul className="mt-1 flex flex-wrap gap-2 text-xs">
-                      {stage.prerequisites.map((item) => (
-                        <li
-                          key={item}
-                          className="rounded-full border border-slate-800/70 bg-slate-950/70 px-3 py-1"
-                        >
-                          {item}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-                {stage.pass_criteria.length > 0 ? (
-                  <div>
-                    <h6 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Pass criteria</h6>
-                    <ul className="mt-1 space-y-1">
-                      {stage.pass_criteria.map((criteria) => (
-                        <li
-                          key={criteria}
-                          className="rounded-md border border-slate-800/70 bg-slate-950/70 px-3 py-2"
-                        >
-                          {criteria}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-                <div>
-                  <h6 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Quiz checkpoint</h6>
-                  <p className="mt-1">{stage.quiz.prompt}</p>
-                  {stage.quiz.answer_key ? (
-                    <p className="mt-1 text-xs text-emerald-300">Answer key: {stage.quiz.answer_key}</p>
-                  ) : null}
-                  <p className="mt-2 text-xs text-slate-300">Remediation: {stage.quiz.remediation}</p>
-                </div>
-                <div className="grid gap-3 text-xs md:grid-cols-2">
-                  <div className="rounded-lg border border-slate-800/70 bg-slate-950/70 px-3 py-2">
-                    <h6 className="text-xs font-semibold uppercase tracking-wide text-slate-400">On success</h6>
-                    <p className="mt-1 text-slate-300">{stage.on_success}</p>
-                  </div>
-                  <div className="rounded-lg border border-slate-800/70 bg-slate-950/70 px-3 py-2">
-                    <h6 className="text-xs font-semibold uppercase tracking-wide text-slate-400">On failure</h6>
-                    <p className="mt-1 text-slate-300">{stage.on_failure}</p>
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-        ),
-      },
-      {
-        id: "modalities",
-        stepNumber: 4,
-        title: "Teaching modalities",
-        description: "Mix formats to keep momentum.",
-        icon: Sparkles,
-        accent: "text-amber-300",
-        content: (
-          <div className="space-y-3">
-            {plan.teaching_modalities.map((modality) => (
-              <article
-                key={`${modality.modality}-${modality.description.slice(0, 12)}`}
-                className="rounded-xl border border-slate-800/70 bg-slate-950/60 p-4 text-sm text-slate-300 shadow-lg shadow-amber-500/10"
-              >
-                <h5 className="text-base font-semibold capitalize text-slate-100">{modality.modality}</h5>
-                <p className="mt-1">{modality.description}</p>
-                {modality.resources.length > 0 ? (
-                  <div className="mt-3">
-                    <h6 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Resources</h6>
-                    <ul className="mt-1 list-disc space-y-1 pl-5">
-                      {modality.resources.map((resource) => (
-                        <li key={resource}>{resource}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ) : null}
-              </article>
-            ))}
-          </div>
-        ),
-      },
-      {
-        id: "assessment",
-        stepNumber: 5,
-        title: "Assessment plan",
-        description: "Check for understanding and depth.",
-        icon: ClipboardList,
-        accent: "text-emerald-300",
-        content: (
-          <article className="space-y-4 rounded-xl border border-slate-800/70 bg-slate-950/60 p-4 text-sm text-slate-300 shadow-lg shadow-emerald-500/10">
-            <div>
-              <h5 className="text-base font-semibold text-slate-100">{plan.assessment.title}</h5>
-              <p className="mt-1 text-xs uppercase tracking-wide text-slate-400">{plan.assessment.format}</p>
-              <p className="mt-2">{plan.assessment.human_in_the_loop_notes}</p>
-            </div>
-            <div className="space-y-3">
-              {plan.assessment.items.map((item, index) => (
                 <div
-                  key={`${item.prompt}-${index}`}
-                  className="rounded-lg border border-slate-800/70 bg-slate-950/60 p-3"
-                >
-                  <div className="flex items-center justify-between text-xs uppercase tracking-wide text-slate-400">
-                    <span>{item.kind.replace(/_/g, " ")}</span>
-                    <span>Item {index + 1}</span>
+                  className={cn(
+                    "absolute -top-10 right-0 h-24 w-24 rounded-full bg-gradient-to-br blur-2xl",
+                    agent.accent
+                  )}
+                />
+                <div className="relative flex h-12 w-12 items-center justify-center rounded-full border border-slate-800/80 bg-slate-950/70 text-white">
+                  <agent.icon className="h-6 w-6" />
+                </div>
+                <h3 className="mt-4 text-base font-semibold text-white">{agent.name}</h3>
+                <p className="mt-2 text-sm text-slate-300">{agent.tagline}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <div className="grid gap-6 lg:grid-cols-[1.1fr,0.9fr]">
+          <section className="flex h-[620px] flex-col overflow-hidden rounded-3xl border border-slate-900/70 bg-slate-950/60 shadow-2xl shadow-slate-950/60">
+            <div className="border-b border-slate-900/60 px-6 py-4">
+              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Tutor collective chat</p>
+              <h2 className="mt-1 text-lg font-semibold text-white">What would you like to explore today?</h2>
+            </div>
+            <div ref={chatViewportRef} className="flex-1 space-y-5 overflow-y-auto px-6 py-6">
+              {messages.map((message) => renderMessage(message))}
+            </div>
+            <form onSubmit={handleSubmit} className="border-t border-slate-900/60 bg-slate-950/80 px-5 py-4">
+              <div className="flex flex-col gap-3 rounded-2xl border border-slate-800/80 bg-slate-900/70 p-3">
+                <textarea
+                  value={inputValue}
+                  onChange={(event) => setInputValue(event.target.value)}
+                  onKeyDown={handleKeyDown}
+                  placeholder="Ask the collective what you'd like to learn…"
+                  rows={3}
+                  className="w-full resize-none rounded-xl border border-transparent bg-transparent text-sm text-slate-100 outline-none placeholder:text-slate-500"
+                  disabled={isSubmitting}
+                />
+                <div className="flex items-center justify-between">
+                  <p className="text-xs text-slate-500">
+                    Tip: press <span className="font-semibold text-slate-300">Shift + Enter</span> for a new line.
+                  </p>
+                  <Button type="submit" disabled={isSubmitting} className="min-w-[140px] bg-emerald-500 text-slate-950 hover:bg-emerald-400">
+                    {isSubmitting ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Coordinating…
+                      </>
+                    ) : (
+                      "Send to agents"
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </form>
+          </section>
+
+          <aside className="flex flex-col gap-6">
+            <div className="rounded-3xl border border-slate-900/70 bg-slate-950/60 p-6 shadow-xl shadow-slate-950/60">
+              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Live assignments</p>
+              <h2 className="mt-2 text-lg font-semibold text-white">Agent task board</h2>
+              <p className="mt-2 text-sm text-slate-400">
+                Each specialist receives a slice of the plan after the manager confers with GPT-5.
+              </p>
+              {assignmentBoard.length === 0 ? (
+                <div className="mt-6 rounded-2xl border border-slate-900/60 bg-slate-900/50 p-5 text-sm text-slate-400">
+                  Ask the collective a learning question to populate the task board.
+                </div>
+              ) : (
+                <div className="mt-6 space-y-4">
+                  {assignmentBoard.map((assignment) => {
+                    const agent = AGENTS.find((item) => item.id === assignment.agentId);
+                    const Icon = agent?.icon ?? AgentGlyph;
+
+                    return (
+                      <div
+                        key={assignment.agentId}
+                        className="rounded-2xl border border-slate-900/60 bg-slate-900/70 p-5"
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-full border border-slate-800/70 bg-slate-950 text-white">
+                            <Icon className="h-5 w-5" />
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold text-white">
+                              {agent?.name ?? "Tutor Agent"}
+                            </p>
+                            <p className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                              {assignment.headline}
+                            </p>
+                          </div>
+                        </div>
+                        <ul className="mt-4 space-y-2 text-sm text-slate-200">
+                          {assignment.tasks.map((task, index) => (
+                            <li key={index} className="flex items-start gap-2">
+                              <AgentGlyph className="mt-0.5 h-3.5 w-3.5 text-emerald-400" />
+                              <span>{task}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {latestPlan && (
+              <div className="rounded-3xl border border-slate-900/70 bg-slate-950/60 p-6 shadow-xl shadow-slate-950/60">
+                <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Latest GPT-5 intel</p>
+                <h2 className="mt-2 text-lg font-semibold text-white">Plan snapshot</h2>
+                <div className="mt-4 space-y-4 text-sm text-slate-200">
+                  <div>
+                    <p className="text-xs uppercase text-slate-500">Topic</p>
+                    <p className="mt-1 text-base text-white">{latestPlan.topic}</p>
                   </div>
-                  <p className="mt-2 text-sm text-slate-200">{item.prompt}</p>
-                  {item.options && item.options.length > 0 ? (
-                    <ul className="mt-2 list-disc space-y-1 pl-5 text-xs text-slate-300">
-                      {item.options.map((option) => (
-                        <li key={option}>{option}</li>
+                  <div>
+                    <p className="text-xs uppercase text-slate-500">Learner profile</p>
+                    <p className="mt-1 text-slate-300">{latestPlan.learner_profile}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase text-slate-500">Objectives</p>
+                    <ul className="mt-2 space-y-1 text-slate-300">
+                      {latestPlan.objectives.slice(0, 4).map((objective, index) => (
+                        <li key={index}>{objective}</li>
                       ))}
                     </ul>
-                  ) : null}
-                  {item.answer_key ? (
-                    <p className="mt-2 text-xs text-emerald-300">Answer key: {item.answer_key}</p>
-                  ) : null}
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase text-slate-500">Model</p>
+                    <p className="mt-1 text-slate-300">{latestPlan.model}</p>
+                  </div>
+                  {formattedTimestamp && (
+                    <div>
+                      <p className="text-xs uppercase text-slate-500">Generated</p>
+                      <p className="mt-1 text-slate-300">{formattedTimestamp}</p>
+                    </div>
+                  )}
                 </div>
-              ))}
-            </div>
-          </article>
-        ),
-      },
-      {
-        id: "completion",
-        stepNumber: 6,
-        title: "Completion signals",
-        description: "Lock in mastery and next steps.",
-        icon: CheckCircle2,
-        accent: "text-emerald-300",
-        content: (
-          <article className="space-y-4 rounded-xl border border-slate-800/70 bg-slate-950/60 p-4 text-sm text-slate-300 shadow-lg shadow-emerald-500/10">
-            <div>
-              <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Mastery indicators</h5>
-              <ul className="mt-1 list-disc space-y-1 pl-5">
-                {plan.completion.mastery_indicators.map((indicator) => (
-                  <li key={indicator}>{indicator}</li>
-                ))}
-              </ul>
-            </div>
-            <div>
-              <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Wrap-up plan</h5>
-              <p className="mt-1">{plan.completion.wrap_up_plan}</p>
-            </div>
-            <div>
-              <h5 className="text-xs font-semibold uppercase tracking-wide text-slate-400">Follow-up suggestions</h5>
-              <ul className="mt-1 list-disc space-y-1 pl-5">
-                {plan.completion.follow_up_suggestions.map((suggestion) => (
-                  <li key={suggestion}>{suggestion}</li>
-                ))}
-              </ul>
-            </div>
-          </article>
-        ),
-      },
-    ],
-    [plan]
-  );
-
-  const currentStage = useMemo(() => {
-    if (stages.length === 0) return null;
-    return stages.find((stage) => stage.id === activeStage) ?? stages[0];
-  }, [activeStage, stages]);
-
-  if (!currentStage) return null;
-
-  const CurrentIcon = currentStage.icon;
-
-  return (
-    <div className="space-y-5">
-      <div className="rounded-lg border border-slate-800/70 bg-slate-950/40 p-4">
-        <h4 className="text-sm font-semibold text-slate-200">Tutor mode state machine</h4>
-        <p className="mt-1 text-xs text-slate-400">
-          Navigate between orchestration stages. The highlighted card shows the currently active phase of the
-          teaching loop.
-        </p>
-      </div>
-
-      <div className="flex flex-col gap-6 lg:flex-row">
-        <aside className="lg:w-64">
-          <ol className="space-y-3">
-            {stages.map((stage) => {
-              const Icon = stage.icon;
-              const isActive = stage.id === currentStage.id;
-              return (
-                <li key={stage.id}>
-                  <button
-                    type="button"
-                    onClick={() => onStageChange(stage.id)}
-                    className={cn(
-                      "w-full rounded-lg border px-4 py-3 text-left text-sm transition focus:outline-none focus:ring-2 focus:ring-amber-300/60",
-                      isActive
-                        ? "border-emerald-300/70 bg-emerald-300/10 text-slate-100 shadow-lg shadow-emerald-500/20"
-                        : "border-slate-800/70 bg-slate-950/60 text-slate-300 hover:border-emerald-300/40 hover:text-slate-100"
-                    )}
-                  >
-                    <span className="flex items-center gap-3">
-                      <span
-                        className={cn(
-                          "flex h-8 w-8 items-center justify-center rounded-full border border-slate-800/70 bg-slate-950/80",
-                          stage.accent
-                        )}
-                      >
-                        <Icon className="h-4 w-4" />
-                      </span>
-                      <span className="flex flex-col">
-                        <span className="text-xs uppercase tracking-wide text-slate-400">
-                          Step {stage.stepNumber}
-                        </span>
-                        <span className="font-semibold text-slate-200">{stage.title}</span>
-                        <span className="text-xs text-slate-400">{stage.description}</span>
-                      </span>
-                    </span>
-                    {isActive ? (
-                      <span className="mt-3 inline-flex items-center gap-2 rounded-full border border-emerald-400/60 bg-emerald-500/10 px-2 py-1 text-xs font-medium text-emerald-200">
-                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-300" aria-hidden />
-                        Active stage
-                      </span>
-                    ) : null}
-                  </button>
-                </li>
-              );
-            })}
-          </ol>
-        </aside>
-
-        <section className="flex-1 space-y-4">
-          <header className="flex items-center gap-3 text-sm font-semibold text-slate-200">
-            <CurrentIcon className={cn("h-4 w-4", currentStage.accent)} />
-            Step {currentStage.stepNumber} · {currentStage.title}
-          </header>
-          {currentStage.content}
-        </section>
+              </div>
+            )}
+          </aside>
+        </div>
       </div>
     </div>
-  );
-}
-
-function ClockIcon(props: SVGProps<SVGSVGElement>) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-      {...props}
-    >
-      <circle cx="12" cy="12" r="9" />
-      <path d="M12 7v5l3 2" />
-    </svg>
   );
 }

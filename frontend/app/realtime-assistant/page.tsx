@@ -8,6 +8,7 @@ import "@radix-ui/themes/styles.css";
 
 import RealtimeConversationPanel from "@/components/realtime-conversation";
 import { Button } from "@/components/ui/button";
+import { PageBanner } from "@/components/page-banner";
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
@@ -366,40 +367,36 @@ export default function RealtimeAssistantPage(): JSX.Element {
 
   return (
     <Theme appearance="dark">
-      <main className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
+      <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
         <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.12),transparent_60%)]" />
         <div className="pointer-events-none absolute inset-0 -z-20 bg-[radial-gradient(circle_at_bottom_right,_rgba(16,185,129,0.12),transparent_55%)]" />
+        <PageBanner
+          title="Realtime assistant workspace"
+          currentPage="Realtime Assistant"
+          containerClassName="max-w-6xl"
+          className="relative z-20 border-slate-800/60 bg-slate-900/70"
+          actions={
+            <Button
+              asChild
+              className="bg-emerald-400 text-slate-950 shadow-[0_12px_30px_-18px_rgba(16,185,129,0.9)] transition-transform hover:-translate-y-0.5 hover:bg-emerald-300"
+            >
+              <Link href="/emotion-console">Open emotion console</Link>
+            </Button>
+          }
+        />
         <div
-          className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col px-6 pb-20 pt-10 sm:px-10"
+          className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col px-6 pb-20 pt-8 sm:px-10"
           ref={surfaceRef}
         >
           <div className="pointer-events-none absolute inset-x-0 top-16 mx-auto h-72 max-w-3xl rounded-full bg-emerald-500/10 blur-3xl" />
-          <header className="relative z-10 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-800/60 bg-slate-900/70 px-6 py-5 shadow-[0_12px_40px_-24px_rgba(15,118,110,0.8)] backdrop-blur">
-            <div>
-              <Heading as="h1" size="5" className="font-heading text-slate-50">
-                Realtime assistant workspace
-              </Heading>
-              <Text className="mt-1 text-sm text-slate-300">
-                Speak with GPT-5 while sharing a live snapshot of the UI you are
-                viewing.
-              </Text>
-            </div>
-            <div className="flex items-center gap-3">
-              <Button
-                variant="ghost"
-                asChild
-                className="text-slate-200 hover:text-slate-50 hover:bg-slate-800/60"
-              >
-                <Link href="/">Back to studio</Link>
-              </Button>
-              <Button
-                asChild
-                className="bg-emerald-400 text-slate-950 shadow-[0_12px_30px_-18px_rgba(16,185,129,0.9)] transition-transform hover:-translate-y-0.5 hover:bg-emerald-300"
-              >
-                <Link href="/emotion-console">Open emotion console</Link>
-              </Button>
-            </div>
-          </header>
+          <section className="relative z-10 mt-6 rounded-2xl border border-slate-800/60 bg-slate-900/70 px-6 py-5 shadow-[0_12px_40px_-24px_rgba(15,118,110,0.8)] backdrop-blur">
+            <Heading as="h1" size="5" className="font-heading text-slate-50">
+              Realtime assistant workspace
+            </Heading>
+            <Text className="mt-1 text-sm text-slate-300">
+              Speak with GPT-5 while sharing a live snapshot of the UI you are viewing.
+            </Text>
+          </section>
 
           <section className="relative z-10 mt-10 grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
             <RealtimeConversationPanel
@@ -498,7 +495,7 @@ export default function RealtimeAssistantPage(): JSX.Element {
             </div>
           </section>
         </div>
-      </main>
+      </div>
     </Theme>
   );
 }

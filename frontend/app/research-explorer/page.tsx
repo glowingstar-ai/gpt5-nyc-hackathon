@@ -1,7 +1,6 @@
 "use client";
 
 import { type FormEvent, useCallback, useMemo, useState } from "react";
-import Link from "next/link";
 import {
   AlertTriangle,
   BookOpen,
@@ -17,6 +16,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { PageBanner } from "@/components/page-banner";
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
@@ -378,6 +378,12 @@ export default function ResearchExplorerPage(): JSX.Element {
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
+      <PageBanner
+        title="Research Explorer"
+        currentPage="Research Explorer"
+        containerClassName="max-w-6xl"
+        className="relative z-20 border-slate-800/70 bg-slate-950/80"
+      />
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950" />
       <div className="pointer-events-none absolute -left-24 top-10 h-72 w-72 rounded-full bg-emerald-500/20 blur-3xl" />
       <div className="pointer-events-none absolute -right-24 bottom-0 h-80 w-80 rounded-full bg-cyan-500/20 blur-3xl" />
@@ -395,13 +401,6 @@ export default function ResearchExplorerPage(): JSX.Element {
               Describe the research you need and watch GPT-5 expand your request, search arXiv, rerank with Cohere, and narrate why each paper matters—all in an OpenAI-style live trace.
             </p>
           </div>
-          <Button
-            asChild
-            variant="ghost"
-            className="self-start text-slate-300 hover:text-slate-50"
-          >
-            <Link href="/">Back to studio</Link>
-          </Button>
         </header>
 
         <section className="rounded-3xl border border-slate-800/70 bg-slate-950/60 p-8 shadow-2xl backdrop-blur">

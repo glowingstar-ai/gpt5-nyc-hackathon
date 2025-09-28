@@ -30,6 +30,7 @@ type HighlightInstruction = {
   selector: string;
   action: "highlight";
   reason?: string | null;
+  script?: string | null;
 };
 
 type AssistantStructuredResponse = {
@@ -110,10 +111,11 @@ const parseAssistantStructuredResponse = (
           if (!entry || typeof entry !== "object") {
             return null;
           }
-          const { selector, action, reason } = entry as {
+          const { selector, action, reason, script } = entry as {
             selector?: unknown;
             action?: unknown;
             reason?: unknown;
+            script?: unknown;
           };
           if (typeof selector !== "string" || selector.trim() === "") {
             return null;
@@ -129,6 +131,10 @@ const parseAssistantStructuredResponse = (
               typeof reason === "string" && reason.trim() !== ""
                 ? reason.trim()
                 : null,
+            script:
+              typeof script === "string" && script.trim() !== ""
+                ? script.trim()
+                : null,
           } satisfies HighlightInstruction;
         })
         .filter((entry): entry is HighlightInstruction => Boolean(entry))
@@ -143,6 +149,41 @@ const parseAssistantStructuredResponse = (
 type RealtimeConversationPanelProps = {
   onShareVisionFrame?: () => Promise<void>;
   visionFrameIntervalMs?: number; // Interval between automatic vision frame captures in milliseconds
+};
+
+const executeHighlightScript = (
+  instruction: HighlightInstruction,
+  element: HTMLElement | null
+): (() => void) | void => {
+  const { script } = instruction;
+  if (
+    typeof window === "undefined" ||
+    typeof document === "undefined" ||
+    !script ||
+    typeof script !== "string" ||
+    script.trim() === ""
+  ) {
+    return undefined;
+  }
+
+  try {
+    // eslint-disable-next-line no-new-func
+    const runner = new Function(
+      "instruction",
+      "element",
+      "document",
+      "window",
+      script
+    );
+    const result = runner(instruction, element, document, window);
+    if (typeof result === "function") {
+      return result as () => void;
+    }
+  } catch (error) {
+    console.warn("Failed to execute highlight script", error);
+  }
+
+  return undefined;
 };
 
 export function RealtimeConversationPanel({
@@ -542,23 +583,34 @@ export function RealtimeConversationPanel({
     }
     const className = "realtime-highlight-outline";
     const applied: HTMLElement[] = [];
+    const cleanupCallbacks: Array<() => void> = [];
 
     highlightInstructions.forEach((instruction, index) => {
       if (!instruction || instruction.action !== "highlight") {
         return;
       }
       const element = document.querySelector<HTMLElement>(instruction.selector);
-      if (!element) {
-        return;
+      if (element) {
+        element.classList.add(className);
+        element.setAttribute("data-gpt-highlight-index", String(index + 1));
+        if (instruction.reason) {
+          element.setAttribute("data-gpt-highlight-reason", instruction.reason);
+        } else {
+          element.removeAttribute("data-gpt-highlight-reason");
+        }
+        applied.push(element);
       }
-      element.classList.add(className);
-      element.setAttribute("data-gpt-highlight-index", String(index + 1));
-      if (instruction.reason) {
-        element.setAttribute("data-gpt-highlight-reason", instruction.reason);
-      } else {
-        element.removeAttribute("data-gpt-highlight-reason");
+
+      const cleanup = executeHighlightScript(instruction, element ?? null);
+      if (typeof cleanup === "function") {
+        cleanupCallbacks.push(() => {
+          try {
+            cleanup();
+          } catch (error) {
+            console.warn("Failed to run highlight script cleanup", error);
+          }
+        });
       }
-      applied.push(element);
     });
 
     return () => {
@@ -566,6 +618,13 @@ export function RealtimeConversationPanel({
         element.classList.remove(className);
         element.removeAttribute("data-gpt-highlight-index");
         element.removeAttribute("data-gpt-highlight-reason");
+      });
+      cleanupCallbacks.forEach((callback) => {
+        try {
+          callback();
+        } catch (error) {
+          console.warn("Failed to clean up highlight script", error);
+        }
       });
     };
   }, [highlightInstructions]);

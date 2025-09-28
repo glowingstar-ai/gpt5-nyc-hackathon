@@ -21,6 +21,7 @@ class HighlightInstruction:
     selector: str
     action: str
     reason: str | None = None
+    script: str | None = None
 
 
 @dataclass(slots=True)
@@ -159,7 +160,8 @@ class VisionAnalyzer:
     {
       "selector": "Exact CSS selector from the DOM digest to highlight",
       "action": "highlight",
-      "reason": "Why this element is relevant to the user's request"
+      "reason": "Why this element is relevant to the user's request",
+      "script": "Optional JavaScript snippet that safely enhances the highlight (e.g. scrolling into view)"
     }
   ]
 }
@@ -173,7 +175,7 @@ Focus on:
 
 Be specific and actionable. If this appears to be a development environment, note any code, errors, or development tools visible.
 
-Use selectors exactly as they appear in the DOM digest. Provide at most five highlight instructions prioritizing the most relevant UI elements."""
+Use selectors exactly as they appear in the DOM digest. Provide at most five highlight instructions prioritizing the most relevant UI elements. Only include the optional "script" field when simple highlighting is insufficient and keep scripts short and safe for execution in the browser."""
                 + dom_context
             )
 
@@ -227,12 +229,14 @@ Focus on:
                     selector = item.get("selector")
                     action = item.get("action", "highlight")
                     reason = item.get("reason")
+                    script = item.get("script")
                     if isinstance(selector, str) and selector.strip():
                         highlight_instructions.append(
                             HighlightInstruction(
                                 selector=selector.strip(),
                                 action=str(action) if isinstance(action, str) else "highlight",
                                 reason=reason.strip() if isinstance(reason, str) else None,
+                                script=script.strip() if isinstance(script, str) and script.strip() else None,
                             )
                         )
 

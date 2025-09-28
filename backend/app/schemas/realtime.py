@@ -18,6 +18,13 @@ class HighlightInstruction(BaseModel):
     reason: str | None = Field(
         default=None, description="Why the element should be highlighted"
     )
+    script: str | None = Field(
+        default=None,
+        description=(
+            "Optional JavaScript snippet the client may execute to enhance the "
+            "highlight (e.g. scrolling into view)."
+        ),
+    )
 
 
 class RealtimeSessionToken(BaseModel):

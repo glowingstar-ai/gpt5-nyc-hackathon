@@ -222,6 +222,7 @@ async def create_realtime_session(
                     selector=instruction.selector,
                     action=instruction.action,
                     reason=instruction.reason,
+                    script=instruction.script,
                 )
                 for instruction in recent_context.highlight_instructions
             ]
@@ -368,6 +369,7 @@ async def accept_vision_frame(
                 selector=instruction.selector,
                 action=instruction.action,
                 reason=instruction.reason,
+                script=instruction.script,
             )
             for instruction in context.highlight_instructions
         ]

@@ -158,7 +158,7 @@ const heroStats = [
 
 export default function LandingPage(): JSX.Element {
   return (
-    <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
+    <div className="relative min-h-screen overflow-x-hidden bg-slate-950 text-slate-100">
       <div
         className="absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950"
         aria-hidden

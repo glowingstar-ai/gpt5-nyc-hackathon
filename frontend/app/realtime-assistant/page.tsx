@@ -1,7 +1,14 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  FormEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import html2canvas from "html2canvas";
 import { Theme, Heading, Text } from "@radix-ui/themes";
 import "@radix-ui/themes/styles.css";
@@ -15,6 +22,14 @@ const API_BASE =
 type ShareStatus = "idle" | "capturing" | "shared" | "error";
 
 const BACKGROUND_FALLBACK = "#0f172a";
+
+type HighlightBox = {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+  label: string;
+};
 
 const STATUS_CARD_VARIANTS: Record<ShareStatus, string> = {
   idle: "border-slate-800/70 bg-slate-900/70 text-slate-300",
@@ -64,6 +79,88 @@ export default function RealtimeAssistantPage(): JSX.Element {
   const [lastSharedPreview, setLastSharedPreview] = useState<string | null>(
     null
   );
+  const [domSelectorInput, setDomSelectorInput] = useState("");
+  const [activeDomSelector, setActiveDomSelector] = useState<string | null>(
+    null
+  );
+  const [highlightBoxes, setHighlightBoxes] = useState<HighlightBox[]>([]);
+  const [domSelectorError, setDomSelectorError] = useState<string | null>(null);
+
+  const recomputeHighlightBoxes = useCallback(
+    (selector: string | null) => {
+      if (typeof window === "undefined") {
+        return;
+      }
+
+      if (!selector) {
+        setHighlightBoxes([]);
+        setDomSelectorError(null);
+        return;
+      }
+
+      try {
+        const elements = Array.from(
+          document.querySelectorAll(selector)
+        ).filter((element) => {
+          if (!element.isConnected) {
+            return false;
+          }
+          return !element.closest("[data-dom-highlighter-overlay='true']");
+        });
+
+        const boxes = elements
+          .map((element) => {
+            const rect = element.getBoundingClientRect();
+            if (rect.width === 0 || rect.height === 0) {
+              return null;
+            }
+
+            const tagLabel = element.tagName
+              ? element.tagName.toLowerCase()
+              : "element";
+            let label = tagLabel;
+            if (element instanceof HTMLElement) {
+              if (element.id) {
+                label += `#${element.id}`;
+              }
+              const classNames = Array.from(element.classList).filter(Boolean);
+              if (classNames.length > 0) {
+                label += classNames
+                  .slice(0, 2)
+                  .map((className) => `.${className}`)
+                  .join("");
+                if (classNames.length > 2) {
+                  label += "…";
+                }
+              }
+            }
+
+            return {
+              top: rect.top,
+              left: rect.left,
+              width: rect.width,
+              height: rect.height,
+              label,
+            } satisfies HighlightBox;
+          })
+          .filter((value): value is HighlightBox => Boolean(value));
+
+        setHighlightBoxes(boxes);
+        setDomSelectorError(
+          boxes.length === 0
+            ? "No matching elements are currently visible."
+            : null
+        );
+      } catch (err) {
+        console.warn("Invalid selector for DOM highlighter", err);
+        setHighlightBoxes([]);
+        setDomSelectorError(
+          "Invalid selector. Enter a valid CSS selector like button or input[type='text']."
+        );
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     return () => {
@@ -72,6 +169,44 @@ export default function RealtimeAssistantPage(): JSX.Element {
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return undefined;
+    }
+
+    if (!activeDomSelector) {
+      return undefined;
+    }
+
+    const updateHighlights = () => {
+      recomputeHighlightBoxes(activeDomSelector);
+    };
+
+    updateHighlights();
+
+    window.addEventListener("resize", updateHighlights);
+    window.addEventListener("scroll", updateHighlights, true);
+
+    const observer =
+      typeof MutationObserver !== "undefined"
+        ? new MutationObserver(() => {
+            updateHighlights();
+          })
+        : null;
+
+    observer?.observe(document.body, {
+      attributes: true,
+      childList: true,
+      subtree: true,
+    });
+
+    return () => {
+      window.removeEventListener("resize", updateHighlights);
+      window.removeEventListener("scroll", updateHighlights, true);
+      observer?.disconnect();
+    };
+  }, [activeDomSelector, recomputeHighlightBoxes]);
 
   const shareUiContext = useCallback(async ({ silent = false } = {}) => {
     console.log(`[Vision Frame] shareUiContext called - silent: ${silent}`);
@@ -171,9 +306,50 @@ export default function RealtimeAssistantPage(): JSX.Element {
     [shareStatus]
   );
 
+  const handleDomSelectorSubmit = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      const trimmed = domSelectorInput.trim();
+      const selector = trimmed.length > 0 ? trimmed : null;
+      setActiveDomSelector(selector);
+      recomputeHighlightBoxes(selector);
+    },
+    [domSelectorInput, recomputeHighlightBoxes]
+  );
+
+  const clearDomHighlights = useCallback(() => {
+    setDomSelectorInput("");
+    setActiveDomSelector(null);
+    setDomSelectorError(null);
+    setHighlightBoxes([]);
+  }, []);
+
   return (
     <Theme appearance="dark">
       <main className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
+        <div
+          aria-hidden="true"
+          data-dom-highlighter-overlay="true"
+          data-html2canvas-ignore="true"
+          className="pointer-events-none fixed inset-0 z-50"
+        >
+          {highlightBoxes.map((box, index) => (
+            <div
+              key={`${box.label}-${index}`}
+              className="pointer-events-none absolute rounded-lg border-2 border-emerald-400 bg-emerald-500/10 shadow-[0_0_0_1px_rgba(16,185,129,0.4)]"
+              style={{
+                top: box.top,
+                left: box.left,
+                width: box.width,
+                height: box.height,
+              }}
+            >
+              <span className="absolute left-0 top-0 -translate-y-full rounded-md bg-emerald-400 px-2 py-0.5 text-xs font-medium text-emerald-950 shadow-lg">
+                {box.label}
+              </span>
+            </div>
+          ))}
+        </div>
         <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.12),transparent_60%)]" />
         <div className="pointer-events-none absolute inset-0 -z-20 bg-[radial-gradient(circle_at_bottom_right,_rgba(16,185,129,0.12),transparent_55%)]" />
         <div
@@ -302,6 +478,50 @@ export default function RealtimeAssistantPage(): JSX.Element {
                 with the assistant. Data remains in-memory for prototyping
                 purposes and is not persisted.
               </Text>
+              <div className="space-y-3 rounded-xl border border-slate-800/70 bg-slate-950/40 p-4">
+                <Heading as="h3" size="3" className="font-heading text-slate-50">
+                  DOM element highlighter
+                </Heading>
+                <Text className="text-sm leading-relaxed text-slate-300">
+                  Enter a CSS selector and we&apos;ll draw bounding boxes around
+                  matching elements in real time. Try typing <code>button</code>
+                  , <code>input</code>, or a class name.
+                </Text>
+                <form
+                  className="flex flex-col gap-2 sm:flex-row"
+                  onSubmit={handleDomSelectorSubmit}
+                >
+                  <input
+                    type="text"
+                    value={domSelectorInput}
+                    onChange={(event) => setDomSelectorInput(event.target.value)}
+                    placeholder="Enter a CSS selector (e.g. button, .card, input[type='text'])"
+                    className="flex-1 rounded-xl border border-slate-700/60 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 shadow-sm focus:border-emerald-400/80 focus:outline-none focus:ring-2 focus:ring-emerald-400/40"
+                  />
+                  <Button type="submit" className="bg-emerald-400 text-slate-950 hover:bg-emerald-300">
+                    Highlight
+                  </Button>
+                </form>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={clearDomHighlights}
+                    className="border-slate-700/60 bg-slate-900/40 text-slate-200 hover:bg-slate-800/60 hover:text-slate-50"
+                    disabled={!activeDomSelector && highlightBoxes.length === 0 && domSelectorInput.trim().length === 0}
+                  >
+                    Clear highlights
+                  </Button>
+                  {activeDomSelector ? (
+                    <Text className="text-xs uppercase tracking-wide text-emerald-300">
+                      Highlighting: {activeDomSelector}
+                    </Text>
+                  ) : null}
+                </div>
+                {domSelectorError ? (
+                  <Text className="text-xs text-rose-300">{domSelectorError}</Text>
+                ) : null}
+              </div>
             </div>
           </section>
         </div>

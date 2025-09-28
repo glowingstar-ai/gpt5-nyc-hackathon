@@ -9,14 +9,22 @@ from pydantic import BaseModel, Field
 
 
 class HighlightInstruction(BaseModel):
-    """Instruction for the client to highlight a DOM element."""
+    """Instruction for the client to highlight or manipulate a DOM element."""
 
-    selector: str = Field(description="CSS selector targeting the DOM node")
-    action: Literal["highlight"] = Field(
+    selector: str | None = Field(
+        default=None, description="CSS selector targeting the DOM node"
+    )
+    action: Literal["highlight", "execute"] = Field(
         default="highlight", description="Type of UI affordance to perform"
     )
     reason: str | None = Field(
         default=None, description="Why the element should be highlighted"
+    )
+    script: str | None = Field(
+        default=None,
+        description=(
+            "Optional JavaScript snippet for the client to execute. Should return an optional cleanup function."
+        ),
     )
 
 

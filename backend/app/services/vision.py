@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import base64
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
@@ -16,11 +16,12 @@ class VisionAnalysisError(RuntimeError):
 
 @dataclass(slots=True)
 class HighlightInstruction:
-    """Instruction for the frontend to highlight a DOM node."""
+    """Instruction for the frontend to manipulate or highlight a DOM node."""
 
-    selector: str
+    selector: str | None
     action: str
     reason: str | None = None
+    script: str | None = None
 
 
 @dataclass(slots=True)
@@ -35,9 +36,9 @@ class VisionContext:
     source: str
     image_base64: str
     captured_at: datetime | None
-    dom_snapshot: str | None
-    dom_summary: str | None
-    highlight_instructions: list[HighlightInstruction]
+    dom_snapshot: str | None = None
+    dom_summary: str | None = None
+    highlight_instructions: list[HighlightInstruction] = field(default_factory=list)
 
 
 class VisionAnalyzer:
@@ -224,17 +225,46 @@ Focus on:
                 for item in highlights_raw:
                     if not isinstance(item, dict):
                         continue
+
                     selector = item.get("selector")
                     action = item.get("action", "highlight")
                     reason = item.get("reason")
-                    if isinstance(selector, str) and selector.strip():
-                        highlight_instructions.append(
-                            HighlightInstruction(
-                                selector=selector.strip(),
-                                action=str(action) if isinstance(action, str) else "highlight",
-                                reason=reason.strip() if isinstance(reason, str) else None,
-                            )
+                    script = item.get("script")
+                    if script is None:
+                        script = item.get("code")
+
+                    normalized_action = (
+                        str(action).strip().lower()
+                        if isinstance(action, str) and action.strip()
+                        else "highlight"
+                    )
+
+                    normalized_selector = (
+                        selector.strip()
+                        if isinstance(selector, str) and selector.strip()
+                        else None
+                    )
+
+                    normalized_script = (
+                        script.strip()
+                        if isinstance(script, str) and script.strip()
+                        else None
+                    )
+
+                    if normalized_action == "highlight" and not normalized_selector:
+                        continue
+
+                    if normalized_action not in {"highlight", "execute"}:
+                        normalized_action = "highlight"
+
+                    highlight_instructions.append(
+                        HighlightInstruction(
+                            selector=normalized_selector,
+                            action=normalized_action,
+                            reason=reason.strip() if isinstance(reason, str) and reason.strip() else None,
+                            script=normalized_script,
                         )
+                    )
 
             return VisionContext(
                 description=data.get("description", "Screenshot analysis"),

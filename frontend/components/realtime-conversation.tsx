@@ -27,9 +27,10 @@ type TranscriptEntry = {
 };
 
 type HighlightInstruction = {
-  selector: string;
-  action: "highlight";
+  selector?: string | null;
+  action: "highlight" | "execute";
   reason?: string | null;
+  script?: string | null;
 };
 
 type AssistantStructuredResponse = {
@@ -110,25 +111,44 @@ const parseAssistantStructuredResponse = (
           if (!entry || typeof entry !== "object") {
             return null;
           }
-          const { selector, action, reason } = entry as {
+          const { selector, action, reason, script, code } = entry as {
             selector?: unknown;
             action?: unknown;
             reason?: unknown;
+            script?: unknown;
+            code?: unknown;
           };
-          if (typeof selector !== "string" || selector.trim() === "") {
-            return null;
-          }
           const normalizedAction =
             typeof action === "string" && action.trim() !== ""
-              ? (action.trim() as HighlightInstruction["action"])
+              ? (action.trim().toLowerCase() as HighlightInstruction["action"])
               : "highlight";
+          if (
+            normalizedAction !== "highlight" &&
+            normalizedAction !== "execute"
+          ) {
+            return null;
+          }
+          const selectorValue =
+            typeof selector === "string" && selector.trim() !== ""
+              ? selector.trim()
+              : null;
+          const scriptSource =
+            typeof script === "string" && script.trim() !== ""
+              ? script.trim()
+              : typeof code === "string" && code.trim() !== ""
+                ? code.trim()
+                : null;
+          if (normalizedAction === "highlight" && !selectorValue) {
+            return null;
+          }
           return {
-            selector: selector.trim(),
+            selector: selectorValue,
             action: normalizedAction,
             reason:
               typeof reason === "string" && reason.trim() !== ""
                 ? reason.trim()
                 : null,
+            script: scriptSource,
           } satisfies HighlightInstruction;
         })
         .filter((entry): entry is HighlightInstruction => Boolean(entry))
@@ -542,23 +562,73 @@ export function RealtimeConversationPanel({
     }
     const className = "realtime-highlight-outline";
     const applied: HTMLElement[] = [];
+    const cleanupCallbacks: Array<() => void> = [];
 
     highlightInstructions.forEach((instruction, index) => {
-      if (!instruction || instruction.action !== "highlight") {
+      if (!instruction) {
         return;
       }
-      const element = document.querySelector<HTMLElement>(instruction.selector);
-      if (!element) {
-        return;
+
+      const element =
+        instruction.selector && typeof instruction.selector === "string"
+          ? document.querySelector<HTMLElement>(instruction.selector)
+          : null;
+
+      if (instruction.action === "highlight" && element) {
+        element.classList.add(className);
+        element.setAttribute("data-gpt-highlight-index", String(index + 1));
+        if (instruction.reason) {
+          element.setAttribute("data-gpt-highlight-reason", instruction.reason);
+        } else {
+          element.removeAttribute("data-gpt-highlight-reason");
+        }
+        applied.push(element);
       }
-      element.classList.add(className);
-      element.setAttribute("data-gpt-highlight-index", String(index + 1));
-      if (instruction.reason) {
-        element.setAttribute("data-gpt-highlight-reason", instruction.reason);
-      } else {
-        element.removeAttribute("data-gpt-highlight-reason");
+
+      if (instruction.script) {
+        try {
+          const executor = new Function(
+            "instruction",
+            "element",
+            "index",
+            "document",
+            "window",
+            String(instruction.script)
+          ) as (
+            instruction: HighlightInstruction,
+            element: HTMLElement | null,
+            index: number,
+            document: Document,
+            window: Window
+          ) => unknown;
+
+          const result = executor(
+            instruction,
+            element,
+            index,
+            document,
+            window
+          );
+
+          if (typeof result === "function") {
+            cleanupCallbacks.push(() => {
+              try {
+                result();
+              } catch (cleanupError) {
+                console.warn(
+                  "Realtime highlight cleanup function threw an error",
+                  cleanupError
+                );
+              }
+            });
+          }
+        } catch (scriptError) {
+          console.warn(
+            "Realtime highlight script execution failed",
+            scriptError
+          );
+        }
       }
-      applied.push(element);
     });
 
     return () => {
@@ -566,6 +636,16 @@ export function RealtimeConversationPanel({
         element.classList.remove(className);
         element.removeAttribute("data-gpt-highlight-index");
         element.removeAttribute("data-gpt-highlight-reason");
+      });
+      cleanupCallbacks.forEach((callback) => {
+        try {
+          callback();
+        } catch (err) {
+          console.warn(
+            "Realtime highlight cleanup callback failed",
+            err
+          );
+        }
       });
     };
   }, [highlightInstructions]);

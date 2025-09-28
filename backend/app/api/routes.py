@@ -222,13 +222,25 @@ async def create_realtime_session(
                     selector=instruction.selector,
                     action=instruction.action,
                     reason=instruction.reason,
+                    script=instruction.script,
                 )
                 for instruction in recent_context.highlight_instructions
             ]
             if highlight_payload:
-                highlight_overview = ", ".join(
-                    f"{item.selector}{f' ({item.reason})' if item.reason else ''}"
+                highlight_overview_entries = [
+                    (
+                        f"{item.selector}" +
+                        (f" ({item.reason})" if item.reason else "")
+                    )
+                    if item.selector
+                    else (
+                        "script instruction"
+                        + (f" ({item.reason})" if item.reason else "")
+                    )
                     for item in highlight_payload
+                ]
+                highlight_overview = ", ".join(
+                    entry for entry in highlight_overview_entries if entry
                 )
                 summary_lines.append("- Highlight candidates: " + highlight_overview)
 
@@ -262,18 +274,31 @@ Use this visual context to provide more relevant and helpful responses. You can 
         if recent_context.dom_snapshot:
             enhanced_instructions += "\n\nDOM digest (JSON):\n" + recent_context.dom_snapshot
 
-    try:
-        # Create a new client with enhanced instructions
-        enhanced_client = RealtimeSessionClient(
-            api_key=client.api_key,
-            base_url=client.base_url,
-            model=client.model,
-            voice=client.voice,
-            instructions=enhanced_instructions or client.instructions,
-            timeout=client.timeout,
+    api_key = getattr(client, "api_key", None)
+    base_url = getattr(client, "base_url", None)
+    model = getattr(client, "model", None)
+    voice = getattr(client, "voice", None)
+    timeout = getattr(client, "timeout", 10.0)
+    existing_instructions = getattr(client, "instructions", None)
+
+    session_client = client
+    if all(value is not None for value in (api_key, base_url, model)):
+        session_client = RealtimeSessionClient(
+            api_key=api_key,
+            base_url=base_url,
+            model=model,
+            voice=voice,
+            instructions=enhanced_instructions or existing_instructions,
+            timeout=timeout,
         )
-        
-        session = await enhanced_client.create_ephemeral_session()
+    elif enhanced_instructions and hasattr(client, "instructions"):
+        try:
+            client.instructions = enhanced_instructions  # type: ignore[attr-defined]
+        except Exception:  # pragma: no cover - defensive fallback
+            pass
+
+    try:
+        session = await session_client.create_ephemeral_session()
     except RealtimeSessionError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
@@ -368,6 +393,7 @@ async def accept_vision_frame(
                 selector=instruction.selector,
                 action=instruction.action,
                 reason=instruction.reason,
+                script=instruction.script,
             )
             for instruction in context.highlight_instructions
         ]

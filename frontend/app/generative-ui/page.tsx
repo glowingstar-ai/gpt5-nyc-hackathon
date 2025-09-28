@@ -6,7 +6,6 @@ import { Loader2, Palette, Sparkles } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { PageBanner } from "@/components/page-banner";
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
@@ -147,11 +146,6 @@ export default function GenerativeUIPage(): JSX.Element {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100">
-      <PageBanner
-        title="Generative UI Studio"
-        currentPage="Generative UI"
-        containerClassName="max-w-7xl"
-      />
       <div className="mx-auto grid min-h-screen w-full max-w-7xl grid-cols-1 gap-6 px-6 py-12 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)] lg:px-12">
         <section className="flex flex-col rounded-2xl border border-white/10 bg-slate-900/40 p-6 shadow-2xl shadow-cyan-900/20">
           <header className="flex items-start justify-between gap-3">

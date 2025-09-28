@@ -93,27 +93,62 @@ export default function GenerativeUIPage(): JSX.Element {
         }),
       });
 
-      if (!response.ok) {
-        throw new Error("The generative UI service is unavailable right now.");
+      let data: unknown;
+
+      try {
+        data = await response.json();
+      } catch (jsonError) {
+        if (!response.ok) {
+          throw new Error(
+            "The generative UI service is unavailable right now."
+          );
+        }
+        throw jsonError;
       }
 
-      const data = await response.json();
+      if (!response.ok) {
+        const detail =
+          typeof data === "object" &&
+          data !== null &&
+          "detail" in data &&
+          typeof (data as { detail?: unknown }).detail === "string"
+            ? ((data as { detail: string }).detail ?? "").trim()
+            : "";
+
+        const message = detail
+          ? detail
+          : "The generative UI service is unavailable right now.";
+
+        throw new Error(message);
+      }
+
+      if (typeof data !== "object" || data === null) {
+        throw new Error("Received an unexpected response from the service.");
+      }
+
+      const payload = data as {
+        message?: unknown;
+        suggested_theme?: {
+          primary_color?: string;
+          accent_color?: string;
+          background_color?: string;
+          text_color?: string;
+        };
+      };
+
       const assistantMessage: ChatMessage = {
         role: "assistant",
         content:
-          typeof data.message === "string"
-            ? data.message
+          typeof payload.message === "string"
+            ? payload.message
             : "I'm here, but I couldn't interpret that response. Try again?",
       };
 
-      const suggestion = data.suggested_theme as
-        | {
-            primary_color?: string;
-            accent_color?: string;
-            background_color?: string;
-            text_color?: string;
-          }
-        | undefined;
+      const suggestion =
+        typeof payload.suggested_theme === "object" &&
+        payload.suggested_theme !== null
+          ? payload.suggested_theme
+          : undefined;
 
       setMessages((prev) => [...prev, assistantMessage]);
 
@@ -127,17 +162,19 @@ export default function GenerativeUIPage(): JSX.Element {
       }
     } catch (err) {
       console.error(err);
-      setError(
+      const errorMessage =
         err instanceof Error
           ? err.message
-          : "Something went wrong while contacting GPT-5."
-      );
+          : "Something went wrong while contacting GPT-5.";
+      setError(errorMessage);
       setMessages((prev) => [
         ...prev,
         {
           role: "assistant",
           content:
-            "I hit a snag talking to the model. Give it another go in a moment?",
+            errorMessage === "The generative UI service is unavailable right now."
+              ? "I hit a snag talking to the model. Give it another go in a moment?"
+              : errorMessage,
         },
       ]);
     } finally {

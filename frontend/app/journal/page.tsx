@@ -1,10 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import WorkspaceBanner from "@/components/workspace-banner";
 import {
   CalendarHeart,
   HeartHandshake,
@@ -182,6 +182,15 @@ export default function JournalStudioPage(): JSX.Element {
       <div className="pointer-events-none absolute -top-40 right-10 h-80 w-80 rounded-full bg-rose-500/20 blur-3xl" />
       <div className="pointer-events-none absolute -bottom-48 left-1/2 h-96 w-96 -translate-x-1/2 rounded-full bg-sky-500/20 blur-3xl" />
 
+      <div className="relative z-10">
+        <WorkspaceBanner
+          title="Evening Journal Studio"
+          current="Journal"
+          subtitle="Craft reflective rituals with mood-guided prompts"
+          maxWidthClassName="max-w-6xl"
+        />
+      </div>
+
       <main className="relative z-10 mx-auto flex w-full max-w-6xl flex-col gap-12 px-6 pb-20 pt-12 lg:px-12">
         <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-2">
@@ -195,13 +204,6 @@ export default function JournalStudioPage(): JSX.Element {
               Settle into a guided reflection that mirrors the softness of twilight. Craft your entry, choose a mood, and receive gentle prompts, breathwork, and an affirmation curated just for tonight.
             </p>
           </div>
-          <nav className="flex items-center gap-3 text-sm text-slate-400">
-            <Link className="hover:text-slate-100" href="/">
-              Home
-            </Link>
-            <span className="text-slate-600">/</span>
-            <span className="text-slate-200">Journal</span>
-          </nav>
         </header>
 
         <section className="grid gap-10 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,0.85fr)]">

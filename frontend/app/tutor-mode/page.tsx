@@ -10,7 +10,6 @@ import {
   type KeyboardEvent,
   type SVGProps,
 } from "react";
-import Link from "next/link";
 import {
   BookOpen,
   CheckCircle2,
@@ -22,6 +21,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import WorkspaceBanner from "@/components/workspace-banner";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
@@ -446,6 +446,12 @@ export default function TutorModePage(): JSX.Element {
 
   return (
     <div className="min-h-screen bg-slate-950 pb-16 text-slate-100">
+      <WorkspaceBanner
+        title="Tutor Mode Studio"
+        current="Tutor Mode"
+        subtitle="Assemble a collective of GPT-5 teaching agents"
+        maxWidthClassName="max-w-6xl"
+      />
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 pb-12 pt-10 lg:px-6">
         <div className="flex items-center justify-between gap-4">
           <div>
@@ -458,13 +464,6 @@ export default function TutorModePage(): JSX.Element {
             <p className="mt-3 max-w-2xl text-sm text-slate-300">
               Describe what you want to learn and watch the manager agent rally a crew of specialists to design a personalised path.
             </p>
-          </div>
-          <div className="hidden shrink-0 md:block">
-            <Link href="/">
-              <Button variant="ghost" className="border border-slate-800 bg-slate-900/60 text-slate-200">
-                Back home
-              </Button>
-            </Link>
           </div>
         </div>
 

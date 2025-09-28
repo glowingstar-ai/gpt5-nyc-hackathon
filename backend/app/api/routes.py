@@ -11,7 +11,8 @@ from pydantic import HttpUrl
 
 from app.api.dependencies import (
     get_auth_client,
-    get_audio_storage,
+    get_audio_transcriber,
+    # get_audio_storage,  # Commented out AWS S3 for now
     get_context_storage,
     get_emotion_analyzer,
     get_generative_ui_service,
@@ -55,10 +56,11 @@ from app.services.generative_ui import (
 )
 from app.services.journal import JournalCoach, JournalCoachError
 from app.services.note import NoteAnnotator, NoteAnnotationError
+from app.services.transcription import AudioTranscriber, AudioTranscriptionError
 from app.services.payment import StripePaymentError, StripePaymentService
 from app.services.realtime import RealtimeSessionClient, RealtimeSessionError
 from app.services.research import ResearchDiscoveryService
-from app.services.storage import S3AudioStorage, StorageServiceError
+# from app.services.storage import S3AudioStorage, StorageServiceError  # Commented out AWS S3 for now
 from app.services.tutor import TutorModeService
 from app.services.vision import (
     VisionAnalysisError,
@@ -378,27 +380,28 @@ async def accept_vision_frame(
 @router.post("/notes", response_model=NoteCreateResponse, tags=["notes"])
 async def create_note(
     payload: NoteCreateRequest,
-    storage: S3AudioStorage = Depends(get_audio_storage),
+    # storage: S3AudioStorage = Depends(get_audio_storage),  # Commented out AWS S3 for now
     annotator: NoteAnnotator = Depends(get_note_annotator),
 ) -> NoteCreateResponse:
     """Persist a note and request an annotated summary."""
 
     audio_url: str | None = None
-    if payload.audio_base64:
-        try:
-            audio_bytes = base64.b64decode(payload.audio_base64, validate=True)
-        except (binascii.Error, ValueError) as exc:
-            raise HTTPException(status_code=400, detail="Invalid base64-encoded audio clip") from exc
+    # Commented out AWS S3 audio upload functionality for now
+    # if payload.audio_base64:
+    #     try:
+    #         audio_bytes = base64.b64decode(payload.audio_base64, validate=True)
+    #     except (binascii.Error, ValueError) as exc:
+    #         raise HTTPException(status_code=400, detail="Invalid base64-encoded audio clip") from exc
 
-        try:
-            upload = storage.upload_audio(audio_bytes, payload.audio_mime_type)
-        except StorageServiceError as exc:
-            raise HTTPException(status_code=502, detail=str(exc)) from exc
+    #     try:
+    #         upload = storage.upload_audio(audio_bytes, payload.audio_mime_type)
+    #     except StorageServiceError as exc:
+    #         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
-        audio_url = upload.url
+    #     audio_url = upload.url
 
     try:
-        annotation = await annotator.annotate(
+        polished_notes = await annotator.annotate(
             title=payload.title,
             content=payload.content,
             audio_url=audio_url,
@@ -411,11 +414,191 @@ async def create_note(
     return NoteCreateResponse(
         note_id=str(uuid4()),
         title=payload.title,
-        content=payload.content,
+        content=polished_notes.content,  # Use polished notes as the main content
         audio_url=audio_url,
-        annotation=annotation.content,
+        annotation=payload.content,  # Keep original notes as annotation for reference
         created_at=created_at,
     )
+
+
+@router.post("/notes/annotate", response_model=None, tags=["notes"])
+async def stream_note_annotation(
+    payload: NoteCreateRequest,
+    # storage: S3AudioStorage = Depends(get_audio_storage),  # Commented out AWS S3 for now
+    annotator: NoteAnnotator = Depends(get_note_annotator),
+    transcriber: AudioTranscriber = Depends(get_audio_transcriber),
+) -> StreamingResponse:
+    """Stream the full note annotation workflow."""
+
+    async def event_stream():
+        annotation_chunks: list[str] = []
+        audio_bytes: bytes | None = None
+        audio_url: str | None = None
+        transcript_text: str | None = None
+
+        try:
+            yield _encode_event(
+                {
+                    "type": "status",
+                    "stage": "initializing",
+                    "message": "Preparing to polish your notes with GPT-5",
+                }
+            )
+
+            # Commented out AWS S3 audio upload functionality for now
+            # if payload.audio_base64:
+            #     try:
+            #         audio_bytes = base64.b64decode(payload.audio_base64, validate=True)
+            #     except (binascii.Error, ValueError) as exc:
+            #         raise ValueError("Invalid base64-encoded audio clip") from exc
+
+            # if audio_bytes:
+            #     yield _encode_event(
+            #         {
+            #             "type": "status",
+            #             "stage": "transcribing",
+            #             "message": "Converting your voice memo to text",
+            #         }
+            #     )
+
+            #     try:
+            #         transcription = await transcriber.transcribe(audio_bytes, payload.audio_mime_type)
+            #     except AudioTranscriptionError as exc:
+            #         raise RuntimeError(str(exc)) from exc
+
+            #     transcript_text = transcription.text
+            #     yield _encode_event(
+            #         {
+            #             "type": "transcript",
+            #             "stage": "transcribing",
+            #             "text": transcript_text,
+            #         }
+            #     )
+
+            #     try:
+            #         upload = storage.upload_audio(audio_bytes, payload.audio_mime_type)
+            #         audio_url = upload.url
+            #         yield _encode_event(
+            #             {
+            #                 "type": "status",
+            #                 "stage": "uploading",
+            #                 "message": "Stored your voice memo securely",
+            #             }
+            #         )
+            #     except StorageServiceError as exc:
+            #         raise RuntimeError(str(exc)) from exc
+
+            yield _encode_event(
+                {
+                    "type": "status",
+                    "stage": "annotating",
+                    "message": "Polishing your notes with GPT-5",
+                }
+            )
+
+            try:
+                async for delta in annotator.stream_annotation(
+                    title=payload.title,
+                    content=payload.content,
+                    audio_url=audio_url,
+                    transcript=transcript_text,
+                ):
+                    if delta:
+                        if isinstance(delta, dict):
+                            # Handle new format with reasoning
+                            if delta.get("type") == "reasoning":
+                                yield _encode_event(
+                                    {
+                                        "type": "reasoning_delta",
+                                        "stage": "reasoning",
+                                        "delta": delta["content"],
+                                    }
+                                )
+                            elif delta.get("type") == "content":
+                                annotation_chunks.append(delta["content"])
+                                yield _encode_event(
+                                    {
+                                        "type": "annotation_delta",
+                                        "stage": "annotating",
+                                        "delta": delta["content"],
+                                    }
+                                )
+                        else:
+                            # Handle old format (backward compatibility)
+                            annotation_chunks.append(delta)
+                            yield _encode_event(
+                                {
+                                    "type": "annotation_delta",
+                                    "stage": "annotating",
+                                    "delta": delta,
+                                }
+                            )
+            except NoteAnnotationError as exc:
+                raise RuntimeError(str(exc)) from exc
+
+            annotation_text = "".join(annotation_chunks).strip()
+            if not annotation_text:
+                try:
+                    fallback = await annotator.annotate(
+                        title=payload.title,
+                        content=payload.content,
+                        audio_url=audio_url,
+                        transcript=transcript_text,
+                    )
+                except NoteAnnotationError as exc:
+                    raise RuntimeError(str(exc)) from exc
+                annotation_text = fallback.content
+            created_at = datetime.now(timezone.utc)
+            note = NoteCreateResponse(
+                note_id=str(uuid4()),
+                title=payload.title,
+                content=annotation_text,  # Use polished notes as the main content
+                audio_url=audio_url,
+                annotation=payload.content,  # Keep original notes as annotation for reference
+                created_at=created_at,
+            )
+
+            yield _encode_event(
+                {
+                    "type": "note_saved",
+                    "stage": "complete",
+                    "note": note.model_dump(mode="json"),
+                    "transcript": transcript_text,
+                }
+            )
+            yield _encode_event(
+                {
+                    "type": "complete",
+                    "stage": "complete",
+                    "message": "Annotation finished",
+                }
+            )
+        except ValueError as exc:
+            yield _encode_event(
+                {
+                    "type": "error",
+                    "stage": "error",
+                    "message": str(exc),
+                }
+            )
+        except RuntimeError as exc:
+            yield _encode_event(
+                {
+                    "type": "error",
+                    "stage": "error",
+                    "message": str(exc),
+                }
+            )
+        except Exception:  # pragma: no cover - defensive guard
+            yield _encode_event(
+                {
+                    "type": "error",
+                    "stage": "error",
+                    "message": "An unexpected error occurred while annotating the note.",
+                }
+            )
+
+    return StreamingResponse(event_stream(), media_type="application/jsonl")
 
 
 @router.post("/journals", response_model=JournalEntryResponse, tags=["journals"])

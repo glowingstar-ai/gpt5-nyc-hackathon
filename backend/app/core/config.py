@@ -23,6 +23,9 @@ class Settings(BaseSettings):
     openai_vision_model: str = Field(
         default="gpt-5", alias="OPENAI_VISION_MODEL"
     )
+    openai_transcription_model: str = Field(
+        default="gpt-4o-transcribe", alias="OPENAI_TRANSCRIPTION_MODEL"
+    )
     openai_annotation_model: str = Field(
         default="gpt-5", alias="OPENAI_ANNOTATION_MODEL"
     )

@@ -17,6 +17,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { AppPageHeader } from "@/components/app-page-header";
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
@@ -381,6 +382,14 @@ export default function ResearchExplorerPage(): JSX.Element {
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950" />
       <div className="pointer-events-none absolute -left-24 top-10 h-72 w-72 rounded-full bg-emerald-500/20 blur-3xl" />
       <div className="pointer-events-none absolute -right-24 bottom-0 h-80 w-80 rounded-full bg-cyan-500/20 blur-3xl" />
+
+      <div className="relative z-10">
+        <AppPageHeader
+          title="Research Explorer"
+          breadcrumbLabel="Research Explorer"
+          description="Streamed RAG that scouts papers and explains why they matter."
+        />
+      </div>
 
       <div className="relative z-10 mx-auto flex min-h-screen w-full max-w-6xl flex-col px-6 py-12 sm:px-10 lg:px-16">
         <header className="mb-10 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">

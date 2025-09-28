@@ -6,6 +6,7 @@ import { Theme, Heading, Text } from "@radix-ui/themes";
 import "@radix-ui/themes/styles.css";
 
 import { Button } from "@/components/ui/button";
+import { AppPageHeader } from "@/components/app-page-header";
 
 type EmotionProbabilities = Record<string, number>;
 
@@ -646,8 +647,14 @@ export default function EmotionConsole(): JSX.Element {
   }, [analysis]);
 
   return (
-    <Theme appearance="inherit">
-      <main className="mx-auto flex min-h-screen w-full max-w-6xl flex-col gap-10 px-6 py-12">
+    <div className="min-h-screen bg-slate-950 text-slate-100">
+      <AppPageHeader
+        title="Multi-modal emotion console"
+        breadcrumbLabel="Emotion Console"
+        description="Capture voice, text, and facial movement in real time to infer emotions."
+      />
+      <Theme appearance="inherit">
+        <main className="mx-auto flex w-full max-w-6xl flex-col gap-10 px-6 py-12">
         <section className="space-y-4">
           <Heading as="h1" size="8" className="font-heading text-balance text-3xl md:text-4xl">
             Multi-modal emotion console
@@ -786,8 +793,9 @@ export default function EmotionConsole(): JSX.Element {
         </section>
 
         {analysis ? <section className="grid gap-4 md:grid-cols-3">{breakdownCards}</section> : null}
-      </main>
-    </Theme>
+        </main>
+      </Theme>
+    </div>
   );
 }
 

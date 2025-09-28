@@ -8,6 +8,7 @@ import "@radix-ui/themes/styles.css";
 
 import RealtimeConversationPanel from "@/components/realtime-conversation";
 import { Button } from "@/components/ui/button";
+import { AppPageHeader } from "@/components/app-page-header";
 
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
@@ -365,8 +366,14 @@ export default function RealtimeAssistantPage(): JSX.Element {
   );
 
   return (
-    <Theme appearance="dark">
-      <main className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
+    <div className="min-h-screen bg-slate-950 text-slate-100">
+      <AppPageHeader
+        title="Realtime assistant workspace"
+        breadcrumbLabel="Realtime Assistant"
+        description="Speak with GPT-5 while sharing a live snapshot of your UI."
+      />
+      <Theme appearance="dark">
+        <main className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
         <div className="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.12),transparent_60%)]" />
         <div className="pointer-events-none absolute inset-0 -z-20 bg-[radial-gradient(circle_at_bottom_right,_rgba(16,185,129,0.12),transparent_55%)]" />
         <div
@@ -498,7 +505,8 @@ export default function RealtimeAssistantPage(): JSX.Element {
             </div>
           </section>
         </div>
-      </main>
-    </Theme>
+        </main>
+      </Theme>
+    </div>
   );
 }

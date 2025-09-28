@@ -22,6 +22,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { AppPageHeader } from "@/components/app-page-header";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
@@ -446,6 +447,11 @@ export default function TutorModePage(): JSX.Element {
 
   return (
     <div className="min-h-screen bg-slate-950 pb-16 text-slate-100">
+      <AppPageHeader
+        title="Tutor mode"
+        breadcrumbLabel="Tutor Mode"
+        description="Ask the GPT-5 tutor collective anything."
+      />
       <div className="mx-auto flex w-full max-w-6xl flex-col gap-8 px-4 pb-12 pt-10 lg:px-6">
         <div className="flex items-center justify-between gap-4">
           <div>

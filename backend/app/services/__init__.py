@@ -2,6 +2,12 @@
 
 from .auth import Auth0Client, Auth0ClientError, AuthTokens, AuthUserInfo
 from .emotion import EmotionAnalyzer, EmotionTaxonomy
+from .generative_ui import (
+    GenerativeUIResult,
+    GenerativeUIService,
+    GenerativeUIServiceError,
+    ThemeSuggestion,
+)
 from .journal import JournalCoach, JournalCoachError, JournalGuidance
 from .note import AnnotationResult, NoteAnnotator, NoteAnnotationError
 from .payment import CheckoutSession, StripePaymentError, StripePaymentService
@@ -16,6 +22,10 @@ __all__ = [
     "AuthUserInfo",
     "EmotionAnalyzer",
     "EmotionTaxonomy",
+    "GenerativeUIResult",
+    "GenerativeUIService",
+    "GenerativeUIServiceError",
+    "ThemeSuggestion",
     "JournalCoach",
     "JournalCoachError",
     "JournalGuidance",

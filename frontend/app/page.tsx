@@ -10,6 +10,7 @@ import {
   Feather,
   Star,
   GraduationCap,
+  Palette,
   LucideIcon,
 } from "lucide-react";
 
@@ -44,6 +45,15 @@ const featureCards = [
     icon: Activity,
     accent: "from-amber-300 via-amber-200 to-amber-400",
     pill: "Live Analysis",
+  },
+  {
+    name: "Generative UI Studio",
+    description:
+      "Pair a PDF brief with a GPT-5 co-designer and iterate on palettes, typography, and layout instantly.",
+    href: "/generative-ui",
+    icon: Palette,
+    accent: "from-teal-300 via-cyan-200 to-blue-400",
+    pill: "Live Theming",
   },
   {
     name: "Notes Workspace",

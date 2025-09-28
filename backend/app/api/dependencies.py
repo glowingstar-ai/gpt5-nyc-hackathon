@@ -5,6 +5,7 @@ from fastapi import HTTPException
 from app.core.config import Settings, get_settings as _get_settings
 from app.services.auth import Auth0Client
 from app.services.emotion import EmotionAnalyzer
+from app.services.generative_ui import GenerativeUIService
 from app.services.journal import JournalCoach
 from app.services.note import NoteAnnotator
 from app.services.payment import StripePaymentService
@@ -76,6 +77,20 @@ def get_note_annotator() -> NoteAnnotator:
         api_key=settings.openai_api_key,
         base_url=settings.openai_api_base_url,
         model=settings.openai_annotation_model,
+    )
+
+
+def get_generative_ui_service() -> GenerativeUIService:
+    """Provide the GPT-5 powered generative UI assistant."""
+
+    settings = _get_settings()
+    if not settings.openai_api_key:
+        raise HTTPException(status_code=503, detail="Generative UI service is not configured")
+
+    return GenerativeUIService(
+        api_key=settings.openai_api_key,
+        base_url=settings.openai_api_base_url,
+        model=settings.openai_generative_ui_model,
     )
 
 

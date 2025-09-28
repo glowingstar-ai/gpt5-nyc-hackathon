@@ -20,6 +20,36 @@ const config: Config = {
           DEFAULT: "#0F172A",
           foreground: "#F8FAFC"
         }
+      },
+      keyframes: {
+        starPulse: {
+          "0%, 100%": {
+            transform: "scale(1) rotate(0deg)",
+            filter: "drop-shadow(0 0 0 rgba(253, 224, 71, 0.35))"
+          },
+          "50%": {
+            transform: "scale(1.08) rotate(3deg)",
+            filter: "drop-shadow(0 0 18px rgba(253, 224, 71, 0.55))"
+          }
+        },
+        sparkle: {
+          "0%": {
+            transform: "translate3d(0, 0, 0) scale(0.4)",
+            opacity: "0"
+          },
+          "45%": {
+            transform: "translate3d(12%, -45%, 0) scale(1)",
+            opacity: "1"
+          },
+          "100%": {
+            transform: "translate3d(28%, -80%, 0) scale(0.2)",
+            opacity: "0"
+          }
+        }
+      },
+      animation: {
+        starPulse: "starPulse 3.6s ease-in-out infinite",
+        sparkle: "sparkle 2s ease-in-out infinite"
       }
     }
   },

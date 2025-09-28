@@ -268,8 +268,24 @@ export default function LandingPage(): JSX.Element {
                 <div className="absolute left-10 top-10 h-48 w-48 rounded-full bg-[radial-gradient(circle,_rgba(253,224,71,0.4),_rgba(2,6,23,0))] blur-xl" />
                 <div className="relative flex flex-col gap-6">
                   <div className="flex items-center justify-between text-sm text-slate-300">
-                    <span className="inline-flex items-center gap-2">
-                      <Star className="h-4 w-4 text-amber-200" />
+                    <span className="group relative inline-flex items-center gap-2">
+                      <span className="relative flex h-7 w-7 items-center justify-center">
+                        <span
+                          aria-hidden
+                          className="absolute inset-0 rounded-full bg-amber-200/20 blur-lg opacity-0 transition-opacity duration-500 group-hover:opacity-80"
+                        />
+                        <Star
+                          className="relative h-5 w-5 text-amber-200 transition-transform duration-500 group-hover:rotate-6 group-hover:scale-110 animate-starPulse"
+                        />
+                        <span
+                          aria-hidden
+                          className="absolute -top-1.5 -right-1 h-2 w-2 rounded-full bg-amber-100/90 opacity-0 group-hover:opacity-100 group-hover:animate-sparkle"
+                        />
+                        <span
+                          aria-hidden
+                          className="absolute -bottom-1 left-0 h-1.5 w-1.5 rounded-full bg-white/80 opacity-0 group-hover:opacity-100 group-hover:animate-sparkle [animation-delay:300ms]"
+                        />
+                      </span>
                       Glow dashboard
                     </span>
                     <span className="inline-flex items-center gap-2 text-amber-100">

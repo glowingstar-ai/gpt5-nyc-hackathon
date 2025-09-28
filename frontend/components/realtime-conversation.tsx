@@ -1,6 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { Heading, Text } from "@radix-ui/themes";
 
 import { Button } from "@/components/ui/button";
@@ -57,20 +62,144 @@ const extractResponseId = (payload: Record<string, unknown>): string => {
   return `resp_${Date.now()}`;
 };
 
+export type UiOverlayInstruction = {
+  id?: string;
+  selector?: string;
+  label?: string;
+  shape?: "circle" | "rect";
+  durationMs?: number;
+  action?: "highlight" | "clear";
+  coords?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+  padding?: number;
+};
+
+type OverlayParseResult = {
+  cleanedText: string;
+  commands: UiOverlayInstruction[];
+};
+
+const OVERLAY_PATTERN = /\[\[overlay\|([\s\S]+?)\]\]/g;
+
+const parseOverlayCommands = (raw: string): OverlayParseResult => {
+  if (!raw) {
+    return { cleanedText: "", commands: [] };
+  }
+
+  const commands: UiOverlayInstruction[] = [];
+  let cleaned = "";
+  let lastIndex = 0;
+
+  for (const match of raw.matchAll(OVERLAY_PATTERN)) {
+    if (match.index === undefined) {
+      continue;
+    }
+
+    cleaned += raw.slice(lastIndex, match.index);
+    lastIndex = match.index + match[0].length;
+
+    try {
+      const payload = JSON.parse(match[1]) as Record<string, unknown>;
+
+      const command: UiOverlayInstruction = {
+        id: typeof payload.id === "string" ? payload.id : undefined,
+        selector:
+          typeof payload.selector === "string"
+            ? payload.selector
+            : undefined,
+        label:
+          typeof payload.label === "string" ? payload.label : undefined,
+        shape:
+          payload.shape === "rect"
+            ? "rect"
+            : payload.shape === "circle"
+              ? "circle"
+              : undefined,
+        durationMs:
+          typeof payload.duration_ms === "number"
+            ? payload.duration_ms
+            : typeof payload.durationMs === "number"
+              ? payload.durationMs
+              : undefined,
+        action:
+          payload.action === "clear"
+            ? "clear"
+            : payload.action === "highlight"
+              ? "highlight"
+              : undefined,
+        padding:
+          typeof payload.padding === "number"
+            ? payload.padding
+            : typeof payload.padding_px === "number"
+              ? payload.padding_px
+              : undefined,
+      };
+
+      const coordsSource =
+        (payload.target && typeof payload.target === "object"
+          ? (payload.target as Record<string, unknown>)
+          : null) ??
+        (payload.coords && typeof payload.coords === "object"
+          ? (payload.coords as Record<string, unknown>)
+          : null) ??
+        (payload.bounding_box && typeof payload.bounding_box === "object"
+          ? (payload.bounding_box as Record<string, unknown>)
+          : null);
+
+      const directCoords = coordsSource ?? payload;
+      const x = Number(directCoords?.x);
+      const y = Number(directCoords?.y);
+      const width = Number(directCoords?.width);
+      const height = Number(directCoords?.height);
+
+      if (
+        Number.isFinite(x) &&
+        Number.isFinite(y) &&
+        Number.isFinite(width) &&
+        Number.isFinite(height)
+      ) {
+        command.coords = {
+          x,
+          y,
+          width,
+          height,
+        };
+      }
+
+      commands.push(command);
+    } catch (err) {
+      console.warn("Failed to parse overlay command", err);
+    }
+  }
+
+  cleaned += raw.slice(lastIndex);
+
+  return { cleanedText: cleaned, commands };
+};
+
 type RealtimeConversationPanelProps = {
   onShareVisionFrame?: () => Promise<void>;
   visionFrameIntervalMs?: number; // Interval between automatic vision frame captures in milliseconds
+  onOverlayInstruction?: (instruction: UiOverlayInstruction) => void;
 };
 
 export function RealtimeConversationPanel({
   onShareVisionFrame,
   visionFrameIntervalMs = 15000, // Default to 15 seconds
+  onOverlayInstruction,
 }: RealtimeConversationPanelProps): JSX.Element {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const peerConnectionRef = useRef<RTCPeerConnection | null>(null);
   const dataChannelRef = useRef<RTCDataChannel | null>(null);
   const localStreamRef = useRef<MediaStream | null>(null);
-  const pendingResponsesRef = useRef<Map<string, string>>(new Map());
+  const pendingResponsesRef = useRef<
+    Map<string, { raw: string; clean: string }>
+  >(new Map());
+  const overlayCommandCacheRef = useRef<Map<string, Set<string>>>(new Map());
   const isMountedRef = useRef(true);
 
   const [isConnecting, setIsConnecting] = useState(false);
@@ -104,6 +233,7 @@ export function RealtimeConversationPanel({
     }
 
     pendingResponsesRef.current.clear();
+    overlayCommandCacheRef.current.clear();
     setIsConnecting(false);
     setIsActive(false);
     if (message) {
@@ -113,23 +243,67 @@ export function RealtimeConversationPanel({
     }
   }, []);
 
+  const dispatchOverlayCommands = useCallback(
+    (responseId: string, commands: UiOverlayInstruction[]) => {
+      if (!commands.length || !onOverlayInstruction) {
+        return;
+      }
+
+      const seen =
+        overlayCommandCacheRef.current.get(responseId) ?? new Set<string>();
+
+      commands.forEach((command) => {
+        const normalized: UiOverlayInstruction = {
+          ...command,
+          action: command.action ?? "highlight",
+          shape: command.shape ?? "circle",
+        };
+
+        const cacheKey = JSON.stringify(normalized);
+        if (seen.has(cacheKey)) {
+          return;
+        }
+        seen.add(cacheKey);
+        overlayCommandCacheRef.current.set(responseId, seen);
+
+        onOverlayInstruction({
+          ...normalized,
+          id: normalized.id ?? `${responseId}-${seen.size}`,
+        });
+      });
+    },
+    [onOverlayInstruction]
+  );
+
   const appendAssistantDelta = useCallback(
     (responseId: string, delta: string) => {
       if (!delta) return;
-      const updated =
-        (pendingResponsesRef.current.get(responseId) ?? "") + delta;
-      pendingResponsesRef.current.set(responseId, updated);
+
+      const existing = pendingResponsesRef.current.get(responseId);
+      const raw = `${existing?.raw ?? ""}${delta}`;
+      const { cleanedText, commands } = parseOverlayCommands(raw);
+
+      pendingResponsesRef.current.set(responseId, {
+        raw,
+        clean: cleanedText,
+      });
+
       setTranscript((prev) => {
         const index = prev.findIndex((entry) => entry.id === responseId);
         if (index >= 0) {
           const clone = [...prev];
-          clone[index] = { ...clone[index], text: updated };
+          clone[index] = { ...clone[index], text: cleanedText };
           return clone;
         }
-        return [...prev, { id: responseId, role: "assistant", text: updated }];
+        return [
+          ...prev,
+          { id: responseId, role: "assistant", text: cleanedText },
+        ];
       });
+
+      dispatchOverlayCommands(responseId, commands);
     },
-    []
+    [dispatchOverlayCommands]
   );
 
   const handleServerMessage = useCallback(
@@ -152,14 +326,26 @@ export function RealtimeConversationPanel({
           const responseId = extractResponseId(payload);
           const existing = pendingResponsesRef.current.get(responseId);
           if (existing) {
-            pendingResponsesRef.current.set(responseId, existing.trim());
+            const trimmedRaw = existing.raw.trim();
+            const { cleanedText, commands } =
+              parseOverlayCommands(trimmedRaw);
+
+            pendingResponsesRef.current.set(responseId, {
+              raw: trimmedRaw,
+              clean: cleanedText.trim(),
+            });
             setTranscript((prev) => {
               const index = prev.findIndex((entry) => entry.id === responseId);
               if (index === -1) return prev;
               const clone = [...prev];
-              clone[index] = { ...clone[index], text: existing.trim() };
+              clone[index] = {
+                ...clone[index],
+                text: cleanedText.trim(),
+              };
               return clone;
             });
+
+            dispatchOverlayCommands(responseId, commands);
           }
           return;
         }
@@ -194,7 +380,7 @@ export function RealtimeConversationPanel({
         console.warn("Failed to parse realtime event", err);
       }
     },
-    [appendAssistantDelta]
+    [appendAssistantDelta, dispatchOverlayCommands]
   );
 
   const startConversation = useCallback(async () => {
@@ -207,6 +393,7 @@ export function RealtimeConversationPanel({
     setStatus("Requesting realtime session…");
     setTranscript([]);
     pendingResponsesRef.current.clear();
+    overlayCommandCacheRef.current.clear();
 
     try {
       if (onShareVisionFrame) {

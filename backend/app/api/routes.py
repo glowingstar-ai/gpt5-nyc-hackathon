@@ -213,7 +213,15 @@ Visual context summary:
 
 A raw base64-encoded frame captured by the client is available for immediate multimodal processing.
 
-Use this visual context to provide more relevant and helpful responses. You can reference what you see on their screen, help them with tasks they're working on, or answer questions about the content they're viewing. Be specific about what you observe and how you can assist them with their current activity."""
+Use this visual context to provide more relevant and helpful responses. You can reference what you see on their screen, help them with tasks they're working on, or answer questions about the content they're viewing. Be specific about what you observe and how you can assist them with their current activity.
+
+You can guide the user with lightweight UI overlays. Include inline commands in your response using the format [[overlay|{{"selector":"[data-ui='nav-home']","label":"Tap \"Back to studio\"","shape":"circle","duration_ms":6000}}]]. Supported selectors include:
+- [data-ui='nav-home'] — "Back to studio" navigation button
+- [data-ui='nav-emotion-console'] — "Open emotion console" shortcut
+- [data-ui='action-share-view'] — "Share current view" capture button
+- [data-ui='action-mark-fresh'] — "Mark context as fresh" confirmation button
+
+Emit [[overlay|{{"action":"clear"}}]] when highlights are no longer required. Continue providing natural language guidance alongside any overlay instructions."""
 
     try:
         # Create a new client with enhanced instructions

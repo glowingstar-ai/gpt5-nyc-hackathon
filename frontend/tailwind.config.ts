@@ -20,6 +20,29 @@ const config: Config = {
           DEFAULT: "#0F172A",
           foreground: "#F8FAFC"
         }
+      },
+      keyframes: {
+        "star-twinkle": {
+          "0%": {
+            transform: "scale(1) rotate(0deg)",
+            filter: "drop-shadow(0 0 0 rgba(253, 224, 71, 0.25))"
+          },
+          "30%": {
+            transform: "scale(1.08) rotate(-6deg)",
+            filter: "drop-shadow(0 0 12px rgba(253, 224, 71, 0.45))"
+          },
+          "60%": {
+            transform: "scale(0.96) rotate(5deg)",
+            filter: "drop-shadow(0 0 6px rgba(253, 224, 71, 0.35))"
+          },
+          "100%": {
+            transform: "scale(1) rotate(0deg)",
+            filter: "drop-shadow(0 0 0 rgba(253, 224, 71, 0.25))"
+          }
+        }
+      },
+      animation: {
+        "star-twinkle": "star-twinkle 4s ease-in-out infinite"
       }
     }
   },

@@ -264,12 +264,15 @@ export default function LandingPage(): JSX.Element {
             </div>
             <div className="relative">
               <div className="absolute inset-0 -translate-y-6 rounded-[2.5rem] bg-gradient-to-br from-amber-200/30 via-amber-500/10 to-transparent blur-3xl" />
-              <div className="relative overflow-hidden rounded-[2.5rem] border border-white/10 bg-slate-950/60 p-6 shadow-[0_30px_80px_rgba(8,7,24,0.6)] backdrop-blur-xl">
+              <div className="group relative overflow-hidden rounded-[2.5rem] border border-white/10 bg-slate-950/60 p-6 shadow-[0_30px_80px_rgba(8,7,24,0.6)] backdrop-blur-xl">
                 <div className="absolute left-10 top-10 h-48 w-48 rounded-full bg-[radial-gradient(circle,_rgba(253,224,71,0.4),_rgba(2,6,23,0))] blur-xl" />
                 <div className="relative flex flex-col gap-6">
                   <div className="flex items-center justify-between text-sm text-slate-300">
-                    <span className="inline-flex items-center gap-2">
-                      <Star className="h-4 w-4 text-amber-200" />
+                    <span className="group/star inline-flex items-center gap-2">
+                      <Star
+                        className="h-4 w-4 text-amber-200 filter drop-shadow-[0_0_4px_rgba(253,224,71,0.35)] transition-transform duration-700 motion-safe:animate-star-twinkle group-hover:-rotate-6 group-hover:scale-125 group-hover/star:rotate-6 group-hover/star:scale-125"
+                        aria-hidden
+                      />
                       Glow dashboard
                     </span>
                     <span className="inline-flex items-center gap-2 text-amber-100">

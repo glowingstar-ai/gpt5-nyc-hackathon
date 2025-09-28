@@ -15,6 +15,7 @@ type RealtimeSessionToken = {
   model: string;
   url: string;
   voice?: string | null;
+  latest_frame_base64?: string | null;
 };
 
 type TranscriptEntry = {
@@ -237,6 +238,11 @@ export function RealtimeConversationPanel({
         );
       }
 
+      const latestFrameBase64 =
+        typeof token.latest_frame_base64 === "string"
+          ? token.latest_frame_base64.trim()
+          : null;
+
       const pc = new RTCPeerConnection();
       peerConnectionRef.current = pc;
 
@@ -273,6 +279,37 @@ export function RealtimeConversationPanel({
         }
         setIsActive(true);
         setStatus("Assistant joined – you can speak or send text prompts.");
+
+        if (latestFrameBase64) {
+          try {
+            const imageDataUrl = latestFrameBase64.startsWith("data:")
+              ? latestFrameBase64
+              : `data:image/jpeg;base64,${latestFrameBase64}`;
+            dataChannel.send(
+              JSON.stringify({
+                type: "conversation.item.create",
+                item: {
+                  type: "message",
+                  role: "user",
+                  content: [
+                    {
+                      type: "input_image",
+                      image_url: {
+                        url: imageDataUrl,
+                        detail: "low",
+                      },
+                    },
+                  ],
+                },
+              })
+            );
+          } catch (err) {
+            console.warn(
+              "Unable to forward initial vision frame to realtime session",
+              err
+            );
+          }
+        }
         dataChannel.send(JSON.stringify({ type: "response.create" }));
       });
       dataChannel.addEventListener("close", () => {

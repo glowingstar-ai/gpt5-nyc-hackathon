@@ -36,7 +36,8 @@
     "permissions": [
       "storage",
       "sidePanel",
-      "tabs"
+      "tabs",
+      "microphone"
     ],
     "host_permissions": [
       "<all_urls>"

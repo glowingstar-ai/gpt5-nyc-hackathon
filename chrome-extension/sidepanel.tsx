@@ -125,20 +125,24 @@ function SidePanel() {
     }
   }, [])
 
-  const appendAssistantDelta = useCallback((responseId: string, delta: string) => {
-    if (!delta) return
-    const updated = (pendingResponsesRef.current.get(responseId) ?? "") + delta
-    pendingResponsesRef.current.set(responseId, updated)
-    setTranscript((prev) => {
-      const index = prev.findIndex((entry) => entry.id === responseId)
-      if (index >= 0) {
-        const clone = [...prev]
-        clone[index] = { ...clone[index], text: updated }
-        return clone
-      }
-      return [...prev, { id: responseId, role: "assistant", text: updated }]
-    })
-  }, [])
+  const appendAssistantDelta = useCallback(
+    (responseId: string, delta: string) => {
+      if (!delta) return
+      const updated =
+        (pendingResponsesRef.current.get(responseId) ?? "") + delta
+      pendingResponsesRef.current.set(responseId, updated)
+      setTranscript((prev) => {
+        const index = prev.findIndex((entry) => entry.id === responseId)
+        if (index >= 0) {
+          const clone = [...prev]
+          clone[index] = { ...clone[index], text: updated }
+          return clone
+        }
+        return [...prev, { id: responseId, role: "assistant", text: updated }]
+      })
+    },
+    []
+  )
 
   const handleServerMessage = useCallback(
     (event: MessageEvent<string>) => {
@@ -191,7 +195,8 @@ function SidePanel() {
               }) as { text?: unknown } | undefined
 
               if (typeof textPart?.text === "string") {
-                const entryId = typeof id === "string" ? id : `user_${Date.now()}`
+                const entryId =
+                  typeof id === "string" ? id : `user_${Date.now()}`
                 setTranscript((prev) => [
                   ...prev,
                   { id: entryId, role: "user", text: textPart.text }
@@ -228,7 +233,9 @@ function SidePanel() {
       )
 
       if (!response.ok) {
-        throw new Error(`Failed to create realtime session (${response.status})`)
+        throw new Error(
+          `Failed to create realtime session (${response.status})`
+        )
       }
 
       const token = (await response.json()) as RealtimeSessionToken
@@ -282,9 +289,23 @@ function SidePanel() {
         }
       })
 
-      const localStream = await navigator.mediaDevices.getUserMedia({
-        audio: true
-      })
+      const localStream = await navigator.mediaDevices
+        .getUserMedia({
+          audio: true
+        })
+        .catch((err) => {
+          if (err.name === "NotAllowedError") {
+            throw new Error(
+              "Microphone permission denied. Please allow microphone access in your browser settings."
+            )
+          } else if (err.name === "NotFoundError") {
+            throw new Error(
+              "No microphone found. Please connect a microphone and try again."
+            )
+          } else {
+            throw new Error(`Failed to access microphone: ${err.message}`)
+          }
+        })
       localStreamRef.current = localStream
       localStream.getTracks().forEach((track) => {
         pc.addTrack(track, localStream)
@@ -422,8 +443,7 @@ function SidePanel() {
               color: "white",
               padding: "10px 16px",
               borderRadius: "10px",
-              cursor:
-                !isConnecting && !isActive ? "not-allowed" : "pointer",
+              cursor: !isConnecting && !isActive ? "not-allowed" : "pointer",
               fontWeight: 600,
               fontSize: "14px"
             }}>
@@ -445,7 +465,8 @@ function SidePanel() {
               Assistant and user transcripts will appear here.
             </p>
           ) : (
-            <ul style={{ listStyle: "none", margin: 0, padding: 0, gap: "8px" }}>
+            <ul
+              style={{ listStyle: "none", margin: 0, padding: 0, gap: "8px" }}>
               {transcript.map((entry) => (
                 <li key={entry.id} style={{ marginBottom: "10px" }}>
                   <span
@@ -503,7 +524,8 @@ function SidePanel() {
               color: "white",
               padding: "10px 16px",
               borderRadius: "10px",
-              cursor: !isActive || !inputValue.trim() ? "not-allowed" : "pointer",
+              cursor:
+                !isActive || !inputValue.trim() ? "not-allowed" : "pointer",
               fontWeight: 600,
               fontSize: "14px"
             }}>

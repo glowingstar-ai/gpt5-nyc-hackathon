@@ -26,6 +26,183 @@ const STATUS_CARD_VARIANTS: Record<ShareStatus, string> = {
     "border-rose-500/60 bg-rose-500/10 text-rose-200 shadow-[0_10px_30px_-12px_rgba(244,63,94,0.55)]",
 };
 
+type DomElementDigest = {
+  selector: string;
+  tag: string;
+  id?: string;
+  classes?: string[];
+  role?: string | null;
+  ariaLabel?: string | null;
+  dataTestId?: string | null;
+  text?: string | null;
+  href?: string | null;
+  placeholder?: string | null;
+  bounds: { x: number; y: number; width: number; height: number };
+  visible: boolean;
+};
+
+type DomSnapshotDigest = {
+  capturedAt: string;
+  pageTitle: string;
+  elementCount: number;
+  elements: DomElementDigest[];
+};
+
+const cssEscape = (value: string): string => {
+  if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
+    return CSS.escape(value);
+  }
+  return value.replace(/([\0-\x1F\x7F-\x9F!"#$%&'()*+,./:;<=>?@[\\\]^`{|}~ ])/g, "\\$1");
+};
+
+const computeUniqueSelector = (element: Element): string => {
+  if (element instanceof HTMLElement && element.id) {
+    return `#${cssEscape(element.id)}`;
+  }
+
+  const segments: string[] = [];
+  let current: Element | null = element;
+  while (current && current.nodeType === Node.ELEMENT_NODE) {
+    if (current instanceof HTMLElement && current.id) {
+      segments.unshift(`#${cssEscape(current.id)}`);
+      break;
+    }
+
+    let segment = current.tagName.toLowerCase();
+    const classList = current instanceof HTMLElement ? current.classList : null;
+    if (classList && classList.length) {
+      const classes = Array.from(classList)
+        .slice(0, 2)
+        .map((cls) => cssEscape(cls));
+      if (classes.length) {
+        segment += `.${classes.join(".")}`;
+      }
+    }
+
+    const parent = current.parentElement;
+    if (parent) {
+      const siblings = Array.from(parent.children).filter(
+        (sibling) => sibling.tagName === current!.tagName
+      );
+      if (siblings.length > 1) {
+        const index = siblings.indexOf(current) + 1;
+        segment += `:nth-of-type(${index})`;
+      }
+    }
+
+    segments.unshift(segment);
+
+    if (!current.parentElement || current.parentElement.tagName === "HTML") {
+      break;
+    }
+
+    current = current.parentElement;
+  }
+
+  return segments.join(" > ");
+};
+
+const isElementVisible = (element: HTMLElement): boolean => {
+  const rect = element.getBoundingClientRect();
+  if (rect.width < 4 || rect.height < 4) {
+    return false;
+  }
+  const style = window.getComputedStyle(element);
+  return (
+    style.visibility !== "hidden" &&
+    style.display !== "none" &&
+    parseFloat(style.opacity || "1") > 0.05
+  );
+};
+
+const captureDomSnapshot = (root: HTMLElement): DomSnapshotDigest | null => {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const selectorParts = [
+    "a[href]",
+    "button",
+    "input",
+    "textarea",
+    "select",
+    "[role='button']",
+    "[role='link']",
+    "[role='menuitem']",
+    "[data-action]",
+    "[data-testid]",
+    "[data-test-id]",
+    "summary",
+    "details",
+    "label",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "p",
+    "[aria-label]",
+  ];
+
+  const nodes = Array.from(
+    root.querySelectorAll<HTMLElement>(selectorParts.join(","))
+  );
+
+  const seenSelectors = new Set<string>();
+  const elements: DomElementDigest[] = [];
+
+  for (const node of nodes) {
+    if (!node.isConnected) continue;
+    const selector = computeUniqueSelector(node);
+    if (!selector || seenSelectors.has(selector)) continue;
+    seenSelectors.add(selector);
+
+    const textContent = (node.textContent ?? "").replace(/\s+/g, " ").trim();
+    const ariaLabel = node.getAttribute("aria-label");
+    const placeholder = node.getAttribute("placeholder");
+    const dataTestId =
+      node.getAttribute("data-testid") ?? node.getAttribute("data-test-id");
+    const bounds = node.getBoundingClientRect();
+
+    elements.push({
+      selector,
+      tag: node.tagName.toLowerCase(),
+      id: node.id || undefined,
+      classes:
+        node.classList.length > 0
+          ? Array.from(node.classList).slice(0, 4)
+          : undefined,
+      role: node.getAttribute("role"),
+      ariaLabel,
+      dataTestId,
+      text: textContent ? textContent.slice(0, 160) : null,
+      href:
+        node instanceof HTMLAnchorElement
+          ? node.getAttribute("href") ?? null
+          : null,
+      placeholder: placeholder ?? null,
+      bounds: {
+        x: Math.round(bounds.left),
+        y: Math.round(bounds.top),
+        width: Math.round(bounds.width),
+        height: Math.round(bounds.height),
+      },
+      visible: isElementVisible(node),
+    });
+
+    if (elements.length >= 150) {
+      break;
+    }
+  }
+
+  return {
+    capturedAt: new Date().toISOString(),
+    pageTitle: typeof document !== "undefined" ? document.title : "",
+    elementCount: elements.length,
+    elements,
+  };
+};
+
 function resolveBackgroundColor(): string {
   if (typeof window === "undefined") {
     return BACKGROUND_FALLBACK;
@@ -113,14 +290,30 @@ export default function RealtimeAssistantPage(): JSX.Element {
         throw new Error("Unable to encode the captured screenshot.");
       }
 
+      let domSnapshotPayload: string | undefined;
+      try {
+        const snapshot = captureDomSnapshot(target);
+        if (snapshot) {
+          domSnapshotPayload = JSON.stringify(snapshot);
+        }
+      } catch (domError) {
+        console.warn("Unable to serialize DOM snapshot", domError);
+      }
+
+      const bodyPayload: Record<string, unknown> = {
+        image_base64: base64,
+        captured_at: new Date().toISOString(),
+        source: "ui",
+      };
+
+      if (domSnapshotPayload) {
+        bodyPayload.dom_snapshot = domSnapshotPayload;
+      }
+
       const response = await fetch(`${API_BASE}/vision/frame`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          image_base64: base64,
-          captured_at: new Date().toISOString(),
-          source: "ui",
-        }),
+        body: JSON.stringify(bodyPayload),
       });
 
       if (!response.ok) {

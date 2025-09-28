@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     openai_realtime_instructions: str | None = Field(
         default=None, alias="OPENAI_REALTIME_INSTRUCTIONS"
     )
+    openai_vision_model: str = Field(
+        default="gpt-5.0", alias="OPENAI_VISION_MODEL"
+    )
     openai_annotation_model: str = Field(
         default="gpt-5.0", alias="OPENAI_ANNOTATION_MODEL"
     )

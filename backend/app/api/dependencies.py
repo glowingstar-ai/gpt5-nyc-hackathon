@@ -14,6 +14,7 @@ from app.services.research import ResearchDiscoveryService
 from app.services.storage import S3AudioStorage, StorageServiceError
 from app.services.tutor import TutorModeService
 from app.services.context_storage import get_context_storage
+from app.services.vision import VisionAnalyzer
 
 
 def get_settings() -> Settings:
@@ -49,6 +50,30 @@ def get_realtime_client() -> RealtimeSessionClient:
         voice=settings.openai_realtime_voice,
         instructions=settings.openai_realtime_instructions,
     )
+
+
+@lru_cache
+def _get_vision_analyzer() -> VisionAnalyzer:
+    """Return a singleton vision analyzer configured for GPT-5."""
+
+    settings = _get_settings()
+    if not settings.openai_api_key:
+        raise ValueError("Vision analysis is not configured")
+
+    return VisionAnalyzer(
+        api_key=settings.openai_api_key,
+        base_url=settings.openai_api_base_url,
+        model=settings.openai_vision_model,
+    )
+
+
+def get_vision_analyzer() -> VisionAnalyzer:
+    """FastAPI dependency for the vision analyzer."""
+
+    try:
+        return _get_vision_analyzer()
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @lru_cache

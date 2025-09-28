@@ -15,12 +15,26 @@ type RealtimeSessionToken = {
   model: string;
   url: string;
   voice?: string | null;
+  dom_summary?: string | null;
+  dom_snapshot?: string | null;
+  highlight_instructions?: HighlightInstruction[] | null;
 };
 
 type TranscriptEntry = {
   id: string;
   role: "assistant" | "user" | "system";
   text: string;
+};
+
+type HighlightInstruction = {
+  selector: string;
+  action: "highlight";
+  reason?: string | null;
+};
+
+type AssistantStructuredResponse = {
+  answer: string;
+  highlights: HighlightInstruction[];
 };
 
 const waitForIceGathering = (pc: RTCPeerConnection): Promise<void> =>
@@ -57,6 +71,75 @@ const extractResponseId = (payload: Record<string, unknown>): string => {
   return `resp_${Date.now()}`;
 };
 
+const extractJsonObject = (raw: string): unknown => {
+  const start = raw.indexOf("{");
+  const end = raw.lastIndexOf("}");
+  if (start === -1 || end <= start) {
+    return null;
+  }
+
+  const candidate = raw.slice(start, end + 1);
+  try {
+    return JSON.parse(candidate);
+  } catch (error) {
+    console.warn("Failed to parse assistant JSON payload", error);
+    return null;
+  }
+};
+
+const parseAssistantStructuredResponse = (
+  raw: string
+): AssistantStructuredResponse | null => {
+  const data = extractJsonObject(raw);
+  if (!data || typeof data !== "object") {
+    return null;
+  }
+
+  const { answer, highlights } = data as {
+    answer?: unknown;
+    highlights?: unknown;
+  };
+
+  if (typeof answer !== "string") {
+    return null;
+  }
+
+  const parsedHighlights: HighlightInstruction[] = Array.isArray(highlights)
+    ? (highlights as unknown[])
+        .map((entry) => {
+          if (!entry || typeof entry !== "object") {
+            return null;
+          }
+          const { selector, action, reason } = entry as {
+            selector?: unknown;
+            action?: unknown;
+            reason?: unknown;
+          };
+          if (typeof selector !== "string" || selector.trim() === "") {
+            return null;
+          }
+          const normalizedAction =
+            typeof action === "string" && action.trim() !== ""
+              ? (action.trim() as HighlightInstruction["action"])
+              : "highlight";
+          return {
+            selector: selector.trim(),
+            action: normalizedAction,
+            reason:
+              typeof reason === "string" && reason.trim() !== ""
+                ? reason.trim()
+                : null,
+          } satisfies HighlightInstruction;
+        })
+        .filter((entry): entry is HighlightInstruction => Boolean(entry))
+    : [];
+
+  return {
+    answer: answer.trim(),
+    highlights: parsedHighlights,
+  };
+};
+
 type RealtimeConversationPanelProps = {
   onShareVisionFrame?: () => Promise<void>;
   visionFrameIntervalMs?: number; // Interval between automatic vision frame captures in milliseconds
@@ -81,6 +164,9 @@ export function RealtimeConversationPanel({
   const [error, setError] = useState<string | null>(null);
   const [transcript, setTranscript] = useState<TranscriptEntry[]>([]);
   const [inputValue, setInputValue] = useState("");
+  const [highlightInstructions, setHighlightInstructions] = useState<
+    HighlightInstruction[]
+  >([]);
 
   const resetConnection = useCallback((message?: string) => {
     dataChannelRef.current?.close();
@@ -106,6 +192,7 @@ export function RealtimeConversationPanel({
     pendingResponsesRef.current.clear();
     setIsConnecting(false);
     setIsActive(false);
+    setHighlightInstructions([]);
     if (message) {
       setStatus(message);
     } else {
@@ -152,14 +239,32 @@ export function RealtimeConversationPanel({
           const responseId = extractResponseId(payload);
           const existing = pendingResponsesRef.current.get(responseId);
           if (existing) {
-            pendingResponsesRef.current.set(responseId, existing.trim());
-            setTranscript((prev) => {
-              const index = prev.findIndex((entry) => entry.id === responseId);
-              if (index === -1) return prev;
-              const clone = [...prev];
-              clone[index] = { ...clone[index], text: existing.trim() };
-              return clone;
-            });
+            const structured = parseAssistantStructuredResponse(existing);
+            if (structured) {
+              pendingResponsesRef.current.set(
+                responseId,
+                structured.answer
+              );
+              setTranscript((prev) => {
+                const index = prev.findIndex((entry) => entry.id === responseId);
+                if (index === -1) return prev;
+                const clone = [...prev];
+                clone[index] = { ...clone[index], text: structured.answer };
+                return clone;
+              });
+              setHighlightInstructions(structured.highlights ?? []);
+            } else {
+              const normalized = existing.trim();
+              pendingResponsesRef.current.set(responseId, normalized);
+              setTranscript((prev) => {
+                const index = prev.findIndex((entry) => entry.id === responseId);
+                if (index === -1) return prev;
+                const clone = [...prev];
+                clone[index] = { ...clone[index], text: normalized };
+                return clone;
+              });
+              setHighlightInstructions([]);
+            }
           }
           return;
         }
@@ -207,6 +312,7 @@ export function RealtimeConversationPanel({
     setStatus("Requesting realtime session…");
     setTranscript([]);
     pendingResponsesRef.current.clear();
+    setHighlightInstructions([]);
 
     try {
       if (onShareVisionFrame) {
@@ -235,6 +341,10 @@ export function RealtimeConversationPanel({
         throw new Error(
           "Realtime session response is missing required fields."
         );
+      }
+
+      if (token.highlight_instructions && token.highlight_instructions.length) {
+        setHighlightInstructions(token.highlight_instructions);
       }
 
       const pc = new RTCPeerConnection();
@@ -326,6 +436,7 @@ export function RealtimeConversationPanel({
     isConnecting,
     onShareVisionFrame,
     resetConnection,
+    setHighlightInstructions,
   ]);
 
   const stopConversation = useCallback(() => {
@@ -365,6 +476,99 @@ export function RealtimeConversationPanel({
       resetConnection();
     };
   }, [resetConnection]);
+
+  useEffect(() => {
+    if (typeof document === "undefined") {
+      return undefined;
+    }
+    const styleId = "gpt-realtime-highlight-style";
+    if (document.getElementById(styleId)) {
+      return undefined;
+    }
+
+    const style = document.createElement("style");
+    style.id = styleId;
+    style.textContent = `
+.realtime-highlight-outline {
+  position: relative;
+  outline: 3px solid rgba(16, 185, 129, 0.85);
+  outline-offset: 6px;
+  border-radius: 14px;
+  box-shadow: 0 0 0 10px rgba(16, 185, 129, 0.18);
+  transition: outline 0.2s ease, box-shadow 0.2s ease;
+}
+.realtime-highlight-outline::before {
+  content: attr(data-gpt-highlight-index);
+  position: absolute;
+  top: -1.75rem;
+  left: 0;
+  background: rgba(16, 185, 129, 0.95);
+  color: #0f172a;
+  font-weight: 700;
+  font-size: 0.7rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 9999px;
+  box-shadow: 0 10px 25px rgba(16, 185, 129, 0.35);
+}
+.realtime-highlight-outline[data-gpt-highlight-reason]::after {
+  content: attr(data-gpt-highlight-reason);
+  position: absolute;
+  top: -1.75rem;
+  left: calc(1.85rem);
+  background: rgba(15, 23, 42, 0.92);
+  color: #a7f3d0;
+  font-size: 0.65rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  padding: 0.2rem 0.7rem;
+  border-radius: 9999px;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.45);
+  white-space: nowrap;
+  pointer-events: none;
+}
+`;
+    document.head.appendChild(style);
+
+    return () => {
+      if (style.parentNode) {
+        style.parentNode.removeChild(style);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof document === "undefined") {
+      return undefined;
+    }
+    const className = "realtime-highlight-outline";
+    const applied: HTMLElement[] = [];
+
+    highlightInstructions.forEach((instruction, index) => {
+      if (!instruction || instruction.action !== "highlight") {
+        return;
+      }
+      const element = document.querySelector<HTMLElement>(instruction.selector);
+      if (!element) {
+        return;
+      }
+      element.classList.add(className);
+      element.setAttribute("data-gpt-highlight-index", String(index + 1));
+      if (instruction.reason) {
+        element.setAttribute("data-gpt-highlight-reason", instruction.reason);
+      } else {
+        element.removeAttribute("data-gpt-highlight-reason");
+      }
+      applied.push(element);
+    });
+
+    return () => {
+      applied.forEach((element) => {
+        element.classList.remove(className);
+        element.removeAttribute("data-gpt-highlight-index");
+        element.removeAttribute("data-gpt-highlight-reason");
+      });
+    };
+  }, [highlightInstructions]);
 
   // DISABLED: Automatic periodic vision frame captures
   // Uncomment the code below if you want to re-enable automatic captures

@@ -1,9 +1,9 @@
-"""Pydantic models for the Tutor Mode feature."""
+"""Pydantic models for the multi-agent Tutor Mode feature."""
 
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -30,131 +30,121 @@ class TutorModeRequest(BaseModel):
     )
 
 
-class TutorUnderstandingPlan(BaseModel):
-    """Step 0 – capture how the tutor will gauge the learner's level."""
+class TutorCurriculumSession(BaseModel):
+    """Single learning block inside the curriculum agent's output."""
 
-    approach: str
-    diagnostic_questions: list[str]
-    signals_to_watch: list[str]
-    beginner_flag_logic: str = Field(
-        default="Classify the learner as a beginner when answers show limited prior knowledge.",
-        description="How the tutor converts qualitative signals into the beginner boolean flag",
-    )
-    follow_up_questions: list[str] = Field(
-        default_factory=list,
-        description="Additional probes asked when the learner is not a beginner",
-    )
-    max_follow_up_iterations: int = Field(
-        default=3,
-        description="Maximum number of iterations before moving on",
-    )
-    escalation_strategy: str = Field(
-        default="Summarise what you learned and explain how you will adapt the plan before continuing.",
-        description="What the tutor does if understanding remains unclear after follow ups",
-    )
+    id: str
+    title: str
+    focus: str
+    duration: str
+    objectives: list[str]
+    learning_modality: Literal[
+        "visual",
+        "verbal",
+        "interactive",
+        "experiential",
+        "reading",
+        "blended",
+    ]
+    core_activities: list[str]
+    practice_opportunity: str
 
 
-class TutorConceptBreakdown(BaseModel):
-    """Step 1 – structured concepts and reasoning."""
+class TutorCurriculumResponse(BaseModel):
+    """Structured curriculum plan from the curriculum agent."""
 
-    concept: str
-    llm_reasoning: str
-    subtopics: list[str]
-    real_world_connections: list[str]
-    prerequisites: list[str] = Field(
-        default_factory=list,
-        description="Concepts that must be mastered before this one",
-    )
-    mastery_checks: list[str] = Field(
-        default_factory=list,
-        description="Observable indicators that the learner is ready to advance",
-    )
-    remediation_plan: str = Field(
-        default="Offer a quick formative quiz and revisit the prerequisite concept with a new example.",
-        description="Action taken when mastery checks are not met",
-    )
-    advancement_cue: str = Field(
-        default="Acknowledge success and transition to the next concept with an applied challenge.",
-        description="How to celebrate/transition after a pass",
-    )
+    topic: str
+    summary: str
+    horizon: str
+    sessions: list[TutorCurriculumSession]
+    capstone_project: str
+    enrichment: list[str]
 
 
-class TutorTeachingModality(BaseModel):
-    """Step 2 – multi-modal explanation strategy."""
+class TutorAssessmentQuestion(BaseModel):
+    """Assessment item created by the assessment agent."""
 
-    modality: Literal["visual", "verbal", "interactive", "experiential", "reading", "other"]
-    description: str
-    resources: list[str]
-
-
-class TutorAssessmentItem(BaseModel):
-    """Single assessment artifact for Step 3."""
-
+    id: str
     prompt: str
-    kind: Literal["multiple_choice", "short_answer", "reflection", "practical"]
+    kind: Literal["multiple_choice", "short_answer"]
     options: list[str] | None = None
-    answer_key: str | None = None
+    answer: str
+    rationale: str
 
 
-class TutorAssessmentPlan(BaseModel):
-    """Step 3 – checks for understanding with human-in-the-loop guidance."""
+class TutorAssessmentResponse(BaseModel):
+    """Quiz and answer key returned by the assessment agent."""
 
     title: str
-    format: str
-    human_in_the_loop_notes: str
-    items: list[TutorAssessmentItem]
+    description: str
+    duration: str
+    grading_notes: list[str]
+    questions: list[TutorAssessmentQuestion]
 
 
-class TutorConversationManager(BaseModel):
-    """High-level directives for the GPT-5 manager orchestrating the session."""
-
-    agent_role: str
-    topic_extraction_prompt: str
-    level_assessment_summary: str
-    containment_strategy: str
-
-
-class TutorStageQuiz(BaseModel):
-    """Quiz blueprint attached to a learning stage."""
-
-    prompt: str
-    answer_key: str | None = None
-    remediation: str
-
-
-class TutorLearningStage(BaseModel):
-    """Learning stage that enforces pass/fail progression rules."""
+class TutorPracticeSprint(BaseModel):
+    """Practice sprint recommendation from the practice agent."""
 
     name: str
+    cadence: str
     focus: str
-    objectives: list[str]
-    prerequisites: list[str]
-    pass_criteria: list[str]
-    quiz: TutorStageQuiz
-    on_success: str
-    on_failure: str
+    checkpoints: list[str]
 
 
-class TutorCompletionPlan(BaseModel):
-    """Step 4 – how the agent knows instruction is complete."""
+class TutorPracticeResponse(BaseModel):
+    """Hands-on practice and project guidance."""
 
-    mastery_indicators: list[str]
-    wrap_up_plan: str
-    follow_up_suggestions: list[str]
+    topic: str
+    warmups: list[str]
+    sprints: list[TutorPracticeSprint]
+    accountability: list[str]
 
 
-class TutorModeResponse(BaseModel):
-    """Comprehensive tutor mode plan returned to clients."""
+class TutorCoachCheckpoint(BaseModel):
+    """Moments where the coach agent checks learner understanding."""
 
-    model: str = Field(description="Model powering the plan")
+    milestone: str
+    prompt: str
+    success_signal: str
+    support_plan: str
+
+
+class TutorCoachResponse(BaseModel):
+    """Progress coaching plan for keeping the learner on track."""
+
+    onboarding_message: str
+    check_ins: list[TutorCoachCheckpoint]
+    celebration_rituals: list[str]
+    escalation_paths: list[str]
+
+
+class TutorManagerProfile(BaseModel):
+    """Metadata about the tutor manager agent coordinating the others."""
+
+    name: str
+    mission: str
+    rationale: str
+    priorities: list[str]
+    next_steps: list[str]
+
+
+class TutorManagerAgentReport(BaseModel):
+    """Describes a dispatched agent and the payload it produced."""
+
+    id: Literal["curriculum", "assessment", "practice", "coach"]
+    name: str
+    route: str
+    status: Literal["completed", "skipped", "failed"]
+    summary: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+
+
+class TutorManagerResponse(BaseModel):
+    """Response returned when the manager agent orchestrates other agents."""
+
+    model: str
     generated_at: datetime
     topic: str
     learner_profile: str
-    objectives: list[str]
-    understanding: TutorUnderstandingPlan
-    concept_breakdown: list[TutorConceptBreakdown]
-    teaching_modalities: list[TutorTeachingModality]
-    assessment: TutorAssessmentPlan
-    completion: TutorCompletionPlan
-    conversation_manager: TutorConversationManager
-    learning_stages: list[TutorLearningStage]
+    manager: TutorManagerProfile
+    agents: list[TutorManagerAgentReport]

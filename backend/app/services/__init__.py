@@ -14,7 +14,7 @@ from .payment import CheckoutSession, StripePaymentError, StripePaymentService
 from .research import ResearchDiscoveryService
 from .storage import AudioUploadResult, S3AudioStorage, StorageServiceError
 from .transcription import AudioTranscriber, AudioTranscriptionError, TranscriptionResult
-from .tutor import TutorModeService
+from .tutor import TutorAgentService
 
 __all__ = [
     "Auth0Client",
@@ -42,6 +42,6 @@ __all__ = [
     "AudioTranscriber",
     "AudioTranscriptionError",
     "TranscriptionResult",
-    "TutorModeService",
+    "TutorAgentService",
     "ResearchDiscoveryService",
 ]

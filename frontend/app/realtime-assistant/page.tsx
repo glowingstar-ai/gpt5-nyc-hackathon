@@ -236,6 +236,13 @@ export default function RealtimeAssistantPage(): JSX.Element {
   const timeoutRef = useRef<number>();
   const shareInFlightRef = useRef(false);
 
+  const [activeTab, setActiveTab] = useState<"editor" | "paper">("editor");
+  const [editorCode, setEditorCode] = useState<string>(
+    "def greet(name: str) -> str:\n" +
+      "    return f\"Hello, {name}! Welcome to the realtime assistant.\"\n\n" +
+      "if __name__ == \"__main__\":\n" +
+      "    print(greet(\"developer\"))\n"
+  );
   const [shareStatus, setShareStatus] = useState<ShareStatus>("idle");
   const [shareMessage, setShareMessage] = useState<string | null>(null);
   const [lastSharedAt, setLastSharedAt] = useState<string | null>(null);
@@ -404,13 +411,96 @@ export default function RealtimeAssistantPage(): JSX.Element {
               </div>
             </header>
 
-          <section className="relative z-10 mt-10 grid gap-6 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-            <RealtimeConversationPanel
-              onShareVisionFrame={() => shareUiContext({ silent: true })}
-              visionFrameIntervalMs={15000} // 15 seconds - adjust this value to change frequency
-            />
+          <section className="relative z-10 mt-10 grid gap-6 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.3fr)_minmax(0,1fr)] lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+            <div className="order-1 space-y-5 rounded-2xl border border-slate-800/60 bg-slate-900/75 p-6 shadow-[0_25px_50px_-20px_rgba(15,23,42,0.65)] backdrop-blur">
+              <div className="flex items-center justify-between gap-3">
+                <Heading as="h2" size="4" className="font-heading text-slate-50">
+                  Workspace tools
+                </Heading>
+                <Text className="text-xs uppercase tracking-wide text-emerald-300">
+                  Prototype
+                </Text>
+              </div>
+              <div className="flex rounded-xl border border-slate-800/60 bg-slate-950/40 p-1 text-sm font-medium text-slate-300">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("editor")}
+                  className={`flex-1 rounded-lg px-3 py-2 transition ${
+                    activeTab === "editor"
+                      ? "bg-emerald-500/20 text-emerald-200 shadow-[0_0_0_1px_rgba(16,185,129,0.35)]"
+                      : "hover:text-slate-100"
+                  }`}
+                >
+                  Code editor
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("paper")}
+                  className={`flex-1 rounded-lg px-3 py-2 transition ${
+                    activeTab === "paper"
+                      ? "bg-emerald-500/20 text-emerald-200 shadow-[0_0_0_1px_rgba(16,185,129,0.35)]"
+                      : "hover:text-slate-100"
+                  }`}
+                >
+                  Research paper
+                </button>
+              </div>
 
-            <div className="space-y-5 rounded-2xl border border-slate-800/60 bg-slate-900/75 p-6 shadow-[0_25px_50px_-20px_rgba(15,23,42,0.65)] backdrop-blur">
+              {activeTab === "editor" ? (
+                <div className="space-y-3">
+                  <div>
+                    <Heading as="h3" size="3" className="font-heading text-slate-100">
+                      Python scratchpad
+                    </Heading>
+                    <Text className="text-xs text-slate-400">
+                      Iterate on code snippets to share directly with the realtime assistant.
+                    </Text>
+                  </div>
+                  <div className="rounded-xl border border-slate-800/60 bg-slate-950/70 shadow-inner">
+                    <textarea
+                      value={editorCode}
+                      onChange={(event) => setEditorCode(event.target.value)}
+                      spellCheck={false}
+                      className="min-h-[320px] w-full resize-none rounded-xl border-0 bg-transparent p-4 font-mono text-sm leading-relaxed text-slate-100 focus:outline-none focus:ring-2 focus:ring-emerald-400/40"
+                    />
+                  </div>
+                  <Text className="text-xs text-slate-500">
+                    Tip: Copy responses from the assistant back into this editor to refine algorithms together.
+                  </Text>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div>
+                    <Heading as="h3" size="3" className="font-heading text-slate-100">
+                      Attention Is All You Need
+                    </Heading>
+                    <Text className="text-xs text-slate-400">
+                      Keep the seminal transformer paper open while collaborating with the assistant.
+                    </Text>
+                  </div>
+                  <div className="overflow-hidden rounded-xl border border-slate-800/60 bg-slate-950/70 shadow-inner">
+                    <iframe
+                      src="https://arxiv.org/pdf/1706.03762.pdf#toolbar=0"
+                      title="Attention Is All You Need paper"
+                      className="h-[360px] w-full"
+                      loading="lazy"
+                    />
+                  </div>
+                  <Text className="text-xs text-slate-500">
+                    PDF provided via arXiv. Use your browser’s controls to download or open in a new tab if needed.
+                  </Text>
+                </div>
+              )}
+            </div>
+
+            <div className="order-2">
+              <RealtimeConversationPanel
+                onShareVisionFrame={() => shareUiContext({ silent: true })}
+                visionFrameIntervalMs={15000} // 15 seconds - adjust this value to change frequency
+              />
+            </div>
+
+            <div className="order-3 space-y-5 rounded-2xl border border-slate-800/60 bg-slate-900/75 p-6 shadow-[0_25px_50px_-20px_rgba(15,23,42,0.65)] backdrop-blur">
               <Heading as="h2" size="4" className="font-heading text-slate-50">
                 Visual context sharing
               </Heading>

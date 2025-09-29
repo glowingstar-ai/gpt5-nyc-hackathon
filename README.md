@@ -1,4 +1,6 @@
-# GPT5 Hackathon Monorepo Starter
+# GlowingStar
+<img width="1728" height="1077" alt="Screenshot 2025-09-29 at 1 45 45 AM" src="https://github.com/user-attachments/assets/7af01dba-a9b3-42df-a68e-89fdc9b549b6" />
+
 
 A batteries-included monorepo that pairs a modern Next.js frontend with a FastAPI backend. The structure is optimized for teams collaborating on product features and services simultaneously.
 

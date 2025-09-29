@@ -79,7 +79,10 @@ const cssEscape = (value: string): string => {
   if (typeof CSS !== "undefined" && typeof CSS.escape === "function") {
     return CSS.escape(value);
   }
-  return value.replace(/([\0-\x1F\x7F-\x9F!"#$%&'()*+,./:;<=>?@[\\\]^`{|}~ ])/g, "\\$1");
+  return value.replace(
+    /([\0-\x1F\x7F-\x9F!"#$%&'()*+,./:;<=>?@[\\\]^`{|}~ ])/g,
+    "\\$1"
+  );
 };
 
 const computeUniqueSelector = (element: Element): string => {
@@ -205,7 +208,7 @@ const captureDomSnapshot = (root: HTMLElement): DomSnapshotDigest | null => {
       text: textContent ? textContent.slice(0, 160) : null,
       href:
         node instanceof HTMLAnchorElement
-          ? node.getAttribute("href") ?? null
+          ? (node.getAttribute("href") ?? null)
           : null,
       placeholder: placeholder ?? null,
       bounds: {
@@ -423,210 +426,210 @@ export default function RealtimeAssistantPage(): JSX.Element {
             className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col px-6 pb-20 pt-10 sm:px-10"
             ref={surfaceRef}
           >
-            <div className="pointer-events-none absolute inset-x-0 top-16 mx-auto h-72 max-w-3xl rounded-full bg-emerald-500/10 blur-3xl" />
-            <header className="relative z-10 flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-800/60 bg-slate-900/70 px-6 py-5 shadow-[0_12px_40px_-24px_rgba(15,118,110,0.8)] backdrop-blur">
-              <div>
-                <Heading as="h1" size="5" className="font-heading text-slate-50">
-                  Realtime assistant workspace
-                </Heading>
-                <Text className="mt-1 text-sm text-slate-300">
-                  Speak with GPT-5 while sharing a live snapshot of the UI you are
-                  viewing.
-                </Text>
-              </div>
-            </header>
-
-          <section className="relative z-10 mt-10 grid gap-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.15fr)]">
-            <div className="flex flex-col justify-between gap-6 rounded-2xl border border-slate-800/60 bg-slate-900/70 p-6 shadow-[0_25px_50px_-20px_rgba(15,118,110,0.45)] backdrop-blur">
-              <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-300/80">
-                    Workspace tools
-                  </p>
-                  <Heading as="h2" size="4" className="mt-1 font-heading text-slate-50">
-                    Creative companion panel
-                  </Heading>
-                  <Text className="mt-2 text-sm text-slate-300">
-                    Swap between a Python scratchpad or dive into the “Attention
-                    Is All You Need” paper without leaving the assistant.
-                  </Text>
-                </div>
-                <div className="inline-flex h-9 items-center gap-2 rounded-full border border-emerald-400/40 bg-emerald-400/10 px-4 text-xs font-semibold uppercase tracking-[0.28em] text-emerald-200">
-                  Live
-                </div>
-              </header>
-
-              <div>
-                <div className="flex gap-2 rounded-xl border border-slate-800/60 bg-slate-950/60 p-1">
-                  {[
-                    { id: "code" as const, label: "Python editor" },
-                    { id: "paper" as const, label: "Research paper" },
-                  ].map((tab) => {
-                    const isActive = activeWorkspaceTab === tab.id;
-                    return (
-                      <button
-                        key={tab.id}
-                        type="button"
-                        onClick={() => setActiveWorkspaceTab(tab.id)}
-                        className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition ${
-                          isActive
-                            ? "bg-emerald-400 text-slate-950 shadow-[0_10px_30px_-20px_rgba(16,185,129,0.9)]"
-                            : "text-slate-300 hover:text-slate-100"
-                        }`}
-                      >
-                        {tab.label}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="mt-5">
-                  {activeWorkspaceTab === "code" ? (
-                    <div className="space-y-4 rounded-xl border border-slate-800/70 bg-slate-950/70 p-5">
-                      <div className="flex flex-wrap items-center justify-between gap-3">
-                        <Text className="text-sm font-semibold text-emerald-200">
-                          Python scratchpad
-                        </Text>
-                        <span className="rounded-full border border-emerald-400/40 bg-emerald-400/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-200">
-                          Synced
-                        </span>
-                      </div>
-                      <textarea
-                        value={pythonSnippet}
-                        onChange={(event) => setPythonSnippet(event.target.value)}
-                        spellCheck={false}
-                        className="h-[26rem] w-full resize-none rounded-lg border border-slate-800/70 bg-slate-950/80 p-4 font-mono text-sm leading-relaxed text-emerald-100 shadow-inner focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-400/40"
-                        aria-label="Python code editor"
-                      />
-                      <Text className="text-xs text-slate-400">
-                        Draft quick utilities or calculations while collaborating with
-                        GPT-5. Code is kept locally in this tab for rapid iteration.
-                      </Text>
-                    </div>
-                  ) : (
-                    <div className="overflow-hidden rounded-xl border border-slate-800/70 bg-slate-950/70">
-                      <object
-                        data="https://arxiv.org/pdf/1706.03762.pdf#toolbar=0"
-                        type="application/pdf"
-                        className="h-[26rem] w-full"
-                      >
-                        <div className="p-6 text-sm text-slate-300">
-                          Your browser cannot display PDFs.
-                          <a
-                            href="https://arxiv.org/pdf/1706.03762.pdf"
-                            className="ml-2 text-emerald-300 underline"
-                          >
-                            Download the paper
-                          </a>
-                          .
-                        </div>
-                      </object>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-6">
-              <RealtimeConversationPanel
-                onShareVisionFrame={() => shareUiContext({ silent: true })}
-                visionFrameIntervalMs={15000} // 15 seconds - adjust this value to change frequency
-              />
-
-              <div className="space-y-5 rounded-2xl border border-slate-800/60 bg-slate-900/75 p-6 shadow-[0_25px_50px_-20px_rgba(15,23,42,0.65)] backdrop-blur">
-                <Heading as="h2" size="4" className="font-heading text-slate-50">
-                  Visual context sharing
-                </Heading>
-                <Text className="text-sm leading-relaxed text-slate-300">
-                  Capture the visible UI so the assistant understands what you
-                  see. Screenshots are automatically analyzed using AI vision and
-                  sent before each conversation, giving the assistant full context
-                  about your current workspace, applications, and tasks.
-                </Text>
-                {lastSharedPreview ? (
-                  <figure className="overflow-hidden rounded-xl border border-slate-800/80 bg-slate-950/80 shadow-lg">
-                    <div className="relative">
-                      <div className="absolute inset-x-0 top-0 z-10 bg-gradient-to-b from-slate-950/70 via-slate-950/10 to-transparent px-4 py-3">
-                        <Text className="text-xs font-medium uppercase tracking-wide text-emerald-300">
-                          Latest shared view
-                        </Text>
-                        {lastSharedLabel ? (
-                          <Text className="text-[11px] text-slate-200/80">
-                            Captured at {lastSharedLabel}
-                          </Text>
-                        ) : null}
-                      </div>
-                      <img
-                        src={lastSharedPreview}
-                        alt="Latest screenshot shared with the assistant"
-                        className="max-h-72 w-full object-cover"
-                      />
-                    </div>
-                    <figcaption className="border-t border-slate-800/80 bg-slate-950/60 px-4 py-3 text-xs text-slate-400">
-                      This preview mirrors the exact screenshot transmitted to
-                      GPT-5 in the realtime session, helping you confirm the
-                      assistant sees the correct workspace.
-                    </figcaption>
-                  </figure>
-                ) : null}
-                <div
-                  className={`space-y-2 rounded-xl border px-4 py-3 transition-colors ${statusCardTone}`}
-                >
-                  <Text className="text-sm font-medium">
-                    {shareMessage ?? "No context shared yet."}
-                  </Text>
-                  {lastSharedLabel ? (
-                    <Text className="text-xs uppercase tracking-wide text-slate-400">
-                      Last shared · {lastSharedLabel}
+            <section className="relative z-10 mt-10 grid gap-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.15fr)]">
+              <div className="flex flex-col justify-between gap-6 rounded-2xl border border-slate-800/60 bg-slate-900/70 p-6 shadow-[0_25px_50px_-20px_rgba(15,118,110,0.45)] backdrop-blur">
+                <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-300/80">
+                      Workspace tools
+                    </p>
+                    <Heading
+                      as="h2"
+                      size="4"
+                      className="mt-1 font-heading text-slate-50"
+                    >
+                      Creative companion panel
+                    </Heading>
+                    <Text className="mt-2 text-sm text-slate-300">
+                      Swap between a Python scratchpad or dive into the
+                      “Attention Is All You Need” paper without leaving the
+                      assistant.
                     </Text>
-                  ) : null}
+                  </div>
+                  <div className="inline-flex h-9 items-center gap-2 rounded-full border border-emerald-400/40 bg-emerald-400/10 px-4 text-xs font-semibold uppercase tracking-[0.28em] text-emerald-200">
+                    Live
+                  </div>
+                </header>
+
+                <div>
+                  <div className="flex gap-2 rounded-xl border border-slate-800/60 bg-slate-950/60 p-1">
+                    {[
+                      { id: "code" as const, label: "Python editor" },
+                      { id: "paper" as const, label: "Research paper" },
+                    ].map((tab) => {
+                      const isActive = activeWorkspaceTab === tab.id;
+                      return (
+                        <button
+                          key={tab.id}
+                          type="button"
+                          onClick={() => setActiveWorkspaceTab(tab.id)}
+                          className={`flex-1 rounded-lg px-3 py-2 text-sm font-medium transition ${
+                            isActive
+                              ? "bg-emerald-400 text-slate-950 shadow-[0_10px_30px_-20px_rgba(16,185,129,0.9)]"
+                              : "text-slate-300 hover:text-slate-100"
+                          }`}
+                        >
+                          {tab.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  <div className="mt-5">
+                    {activeWorkspaceTab === "code" ? (
+                      <div className="space-y-4 rounded-xl border border-slate-800/70 bg-slate-950/70 p-5">
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <Text className="text-sm font-semibold text-emerald-200">
+                            Python scratchpad
+                          </Text>
+                          <span className="rounded-full border border-emerald-400/40 bg-emerald-400/10 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.2em] text-emerald-200">
+                            Synced
+                          </span>
+                        </div>
+                        <textarea
+                          value={pythonSnippet}
+                          onChange={(event) =>
+                            setPythonSnippet(event.target.value)
+                          }
+                          spellCheck={false}
+                          className="h-[26rem] w-full resize-none rounded-lg border border-slate-800/70 bg-slate-950/80 p-4 font-mono text-sm leading-relaxed text-emerald-100 shadow-inner focus:border-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-400/40"
+                          aria-label="Python code editor"
+                        />
+                        <Text className="text-xs text-slate-400">
+                          Draft quick utilities or calculations while
+                          collaborating with GPT-5. Code is kept locally in this
+                          tab for rapid iteration.
+                        </Text>
+                      </div>
+                    ) : (
+                      <div className="overflow-hidden rounded-xl border border-slate-800/70 bg-slate-950/70">
+                        <object
+                          data="https://arxiv.org/pdf/1706.03762.pdf#toolbar=0"
+                          type="application/pdf"
+                          className="h-[26rem] w-full"
+                        >
+                          <div className="p-6 text-sm text-slate-300">
+                            Your browser cannot display PDFs.
+                            <a
+                              href="https://arxiv.org/pdf/1706.03762.pdf"
+                              className="ml-2 text-emerald-300 underline"
+                            >
+                              Download the paper
+                            </a>
+                            .
+                          </div>
+                        </object>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <Button
-                    onClick={() => {
-                      void shareUiContext().catch(() => undefined);
-                    }}
-                    disabled={shareStatus === "capturing"}
-                    className="flex-1 bg-emerald-400 text-slate-950 shadow-[0_16px_40px_-24px_rgba(16,185,129,0.9)] transition-transform hover:-translate-y-0.5 hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-80"
-                  >
-                    {shareStatus === "capturing"
-                      ? "Analyzing…"
-                      : "Share current view"}
-                  </Button>
-                  <Button
-                    variant="outline"
-                    onClick={() => {
-                      if (lastSharedAt) {
-                        setShareMessage(
-                          "The assistant has the latest analyzed context."
-                        );
-                        setShareStatus("shared");
-                        if (timeoutRef.current) {
-                          window.clearTimeout(timeoutRef.current);
-                        }
-                        timeoutRef.current = window.setTimeout(() => {
-                          setShareStatus("idle");
-                          setShareMessage(null);
-                        }, 2000);
-                      }
-                    }}
-                    disabled={!lastSharedAt}
-                    className="flex-1 border-slate-700/70 bg-slate-900/40 text-slate-200 transition hover:bg-slate-800/70 hover:text-slate-50 disabled:border-slate-800/60 disabled:text-slate-500"
-                  >
-                    Mark context as fresh
-                  </Button>
-                </div>
-                <Text className="text-xs text-slate-400">
-                  Screenshots are analyzed using AI vision and context is shared
-                  with the assistant. Data remains in-memory for prototyping
-                  purposes and is not persisted.
-                </Text>
               </div>
-            </div>
-          </section>
-        </div>
-      </main>
-    </div>
-  </Theme>
+
+              <div className="space-y-6">
+                <RealtimeConversationPanel
+                  onShareVisionFrame={() => shareUiContext({ silent: true })}
+                  visionFrameIntervalMs={15000} // 15 seconds - adjust this value to change frequency
+                />
+
+                <div className="space-y-5 rounded-2xl border border-slate-800/60 bg-slate-900/75 p-6 shadow-[0_25px_50px_-20px_rgba(15,23,42,0.65)] backdrop-blur">
+                  <Heading
+                    as="h2"
+                    size="4"
+                    className="font-heading text-slate-50"
+                  >
+                    Visual context sharing
+                  </Heading>
+                  <Text className="text-sm leading-relaxed text-slate-300">
+                    Capture the visible UI so the assistant understands what you
+                    see. Screenshots are automatically analyzed using AI vision
+                    and sent before each conversation, giving the assistant full
+                    context about your current workspace, applications, and
+                    tasks.
+                  </Text>
+                  {lastSharedPreview ? (
+                    <figure className="overflow-hidden rounded-xl border border-slate-800/80 bg-slate-950/80 shadow-lg">
+                      <div className="relative">
+                        <div className="absolute inset-x-0 top-0 z-10 bg-gradient-to-b from-slate-950/70 via-slate-950/10 to-transparent px-4 py-3">
+                          <Text className="text-xs font-medium uppercase tracking-wide text-emerald-300">
+                            Latest shared view
+                          </Text>
+                          {lastSharedLabel ? (
+                            <Text className="text-[11px] text-slate-200/80">
+                              Captured at {lastSharedLabel}
+                            </Text>
+                          ) : null}
+                        </div>
+                        <img
+                          src={lastSharedPreview}
+                          alt="Latest screenshot shared with the assistant"
+                          className="max-h-72 w-full object-cover"
+                        />
+                      </div>
+                      <figcaption className="border-t border-slate-800/80 bg-slate-950/60 px-4 py-3 text-xs text-slate-400">
+                        This preview mirrors the exact screenshot transmitted to
+                        GPT-5 in the realtime session, helping you confirm the
+                        assistant sees the correct workspace.
+                      </figcaption>
+                    </figure>
+                  ) : null}
+                  <div
+                    className={`space-y-2 rounded-xl border px-4 py-3 transition-colors ${statusCardTone}`}
+                  >
+                    <Text className="text-sm font-medium">
+                      {shareMessage ?? "No context shared yet."}
+                    </Text>
+                    {lastSharedLabel ? (
+                      <Text className="text-xs uppercase tracking-wide text-slate-400">
+                        Last shared · {lastSharedLabel}
+                      </Text>
+                    ) : null}
+                  </div>
+                  <div className="flex flex-col gap-3 sm:flex-row">
+                    <Button
+                      onClick={() => {
+                        void shareUiContext().catch(() => undefined);
+                      }}
+                      disabled={shareStatus === "capturing"}
+                      className="flex-1 bg-emerald-400 text-slate-950 shadow-[0_16px_40px_-24px_rgba(16,185,129,0.9)] transition-transform hover:-translate-y-0.5 hover:bg-emerald-300 disabled:cursor-not-allowed disabled:opacity-80"
+                    >
+                      {shareStatus === "capturing"
+                        ? "Analyzing…"
+                        : "Share current view"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        if (lastSharedAt) {
+                          setShareMessage(
+                            "The assistant has the latest analyzed context."
+                          );
+                          setShareStatus("shared");
+                          if (timeoutRef.current) {
+                            window.clearTimeout(timeoutRef.current);
+                          }
+                          timeoutRef.current = window.setTimeout(() => {
+                            setShareStatus("idle");
+                            setShareMessage(null);
+                          }, 2000);
+                        }
+                      }}
+                      disabled={!lastSharedAt}
+                      className="flex-1 border-slate-700/70 bg-slate-900/40 text-slate-200 transition hover:bg-slate-800/70 hover:text-slate-50 disabled:border-slate-800/60 disabled:text-slate-500"
+                    >
+                      Mark context as fresh
+                    </Button>
+                  </div>
+                  <Text className="text-xs text-slate-400">
+                    Screenshots are analyzed using AI vision and context is
+                    shared with the assistant. Data remains in-memory for
+                    prototyping purposes and is not persisted.
+                  </Text>
+                </div>
+              </div>
+            </section>
+          </div>
+        </main>
+      </div>
+    </Theme>
   );
 }

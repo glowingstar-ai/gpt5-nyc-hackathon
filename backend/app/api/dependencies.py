@@ -13,7 +13,13 @@ from app.services.payment import StripePaymentService
 from app.services.realtime import RealtimeSessionClient
 from app.services.research import ResearchDiscoveryService
 from app.services.storage import S3AudioStorage, StorageServiceError
-from app.services.tutor import TutorModeService
+from app.services.tutor import (
+    TutorAssessmentAgent,
+    TutorCoachAgent,
+    TutorCurriculumAgent,
+    TutorModeService,
+    TutorPracticeAgent,
+)
 from app.services.context_storage import get_context_storage
 from app.services.vision import VisionAnalyzer
 
@@ -186,19 +192,69 @@ def get_research_service() -> ResearchDiscoveryService:
 
 
 @lru_cache
+def _get_curriculum_agent() -> TutorCurriculumAgent:
+    settings = _get_settings()
+    return TutorCurriculumAgent(model=settings.openai_generative_ui_model or "gpt-5")
+
+
+def get_curriculum_agent() -> TutorCurriculumAgent:
+    """Expose the curriculum agent for dependency injection."""
+
+    return _get_curriculum_agent()
+
+
+@lru_cache
+def _get_assessment_agent() -> TutorAssessmentAgent:
+    settings = _get_settings()
+    return TutorAssessmentAgent(model=settings.openai_generative_ui_model or "gpt-5")
+
+
+def get_assessment_agent() -> TutorAssessmentAgent:
+    """Expose the assessment agent for dependency injection."""
+
+    return _get_assessment_agent()
+
+
+@lru_cache
+def _get_practice_agent() -> TutorPracticeAgent:
+    settings = _get_settings()
+    return TutorPracticeAgent(model=settings.openai_generative_ui_model or "gpt-5")
+
+
+def get_practice_agent() -> TutorPracticeAgent:
+    """Expose the practice agent for dependency injection."""
+
+    return _get_practice_agent()
+
+
+@lru_cache
+def _get_coach_agent() -> TutorCoachAgent:
+    settings = _get_settings()
+    return TutorCoachAgent(model=settings.openai_generative_ui_model or "gpt-5")
+
+
+def get_coach_agent() -> TutorCoachAgent:
+    """Expose the coaching agent for dependency injection."""
+
+    return _get_coach_agent()
+
+
+@lru_cache
 def _get_tutor_service() -> TutorModeService:
-    """Return a singleton tutor mode service configured from settings."""
+    """Return a singleton tutor manager assembled from sub-agents."""
 
     settings = _get_settings()
     return TutorModeService(
-        api_key=settings.openai_api_key,
-        base_url=settings.openai_api_base_url,
-        model="gpt-5",
+        model=settings.openai_generative_ui_model or "gpt-5",
+        curriculum_agent=_get_curriculum_agent(),
+        assessment_agent=_get_assessment_agent(),
+        practice_agent=_get_practice_agent(),
+        coach_agent=_get_coach_agent(),
     )
 
 
 def get_tutor_service() -> TutorModeService:
-    """FastAPI dependency wrapper around the tutor service singleton."""
+    """FastAPI dependency wrapper around the tutor manager singleton."""
 
     return _get_tutor_service()
 

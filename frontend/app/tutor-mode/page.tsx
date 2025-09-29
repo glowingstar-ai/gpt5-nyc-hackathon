@@ -23,27 +23,28 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import WorkspaceBanner from "@/components/workspace-banner";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000/api/v1";
 
 const AGENTS = [
   {
     id: "manager",
     name: "GPT-5 Manager",
-    tagline: "Coordinates the tutor galaxy and delegates work",
+    tagline: "Routes each tutoring specialist and keeps context aligned",
     accent: "from-amber-500/70 via-orange-500/60 to-amber-400/80",
     icon: Sparkles,
   },
   {
-    id: "strategist",
+    id: "curriculum",
     name: "Curriculum Strategist",
     tagline: "Designs the staged learning journey",
     accent: "from-sky-500/70 via-cyan-500/60 to-blue-500/70",
     icon: Compass,
   },
   {
-    id: "researcher",
-    name: "Modality Researcher",
-    tagline: "Curates resources and multi-modal explanations",
+    id: "practice",
+    name: "Practice Producer",
+    tagline: "Curates warmups, sprints, and accountability loops",
     accent: "from-violet-500/70 via-fuchsia-500/60 to-purple-500/70",
     icon: BookOpen,
   },
@@ -66,80 +67,93 @@ const AGENTS = [
 type AgentConfig = (typeof AGENTS)[number];
 type AgentId = AgentConfig["id"];
 
-type TutorTeachingModalityKind =
-  | "visual"
-  | "verbal"
-  | "interactive"
-  | "experiential"
-  | "reading"
-  | "other";
+type TutorCurriculumSession = {
+  id: string;
+  title: string;
+  focus: string;
+  duration: string;
+  objectives: string[];
+  learning_modality: "visual" | "verbal" | "interactive" | "experiential" | "reading" | "blended";
+  core_activities: string[];
+  practice_opportunity: string;
+};
 
-type TutorModeResponse = {
+type TutorCurriculumResponse = {
+  topic: string;
+  summary: string;
+  horizon: string;
+  sessions: TutorCurriculumSession[];
+  capstone_project: string;
+  enrichment: string[];
+};
+
+type TutorAssessmentQuestion = {
+  id: string;
+  prompt: string;
+  kind: "multiple_choice" | "short_answer";
+  options?: string[] | null;
+  answer: string;
+  rationale: string;
+};
+
+type TutorAssessmentResponse = {
+  title: string;
+  description: string;
+  duration: string;
+  grading_notes: string[];
+  questions: TutorAssessmentQuestion[];
+};
+
+type TutorPracticeSprint = {
+  name: string;
+  cadence: string;
+  focus: string;
+  checkpoints: string[];
+};
+
+type TutorPracticeResponse = {
+  topic: string;
+  warmups: string[];
+  sprints: TutorPracticeSprint[];
+  accountability: string[];
+};
+
+type TutorCoachCheckpoint = {
+  milestone: string;
+  prompt: string;
+  success_signal: string;
+  support_plan: string;
+};
+
+type TutorCoachResponse = {
+  onboarding_message: string;
+  check_ins: TutorCoachCheckpoint[];
+  celebration_rituals: string[];
+  escalation_paths: string[];
+};
+
+type TutorManagerAgentReport = {
+  id: "curriculum" | "assessment" | "practice" | "coach";
+  name: string;
+  route: string;
+  status: "completed" | "skipped" | "failed";
+  summary: string;
+  payload: unknown;
+};
+
+type TutorManagerResponse = {
   model: string;
   generated_at: string;
   topic: string;
   learner_profile: string;
-  objectives: string[];
-  understanding: {
-    approach: string;
-    diagnostic_questions: string[];
-    signals_to_watch: string[];
-    beginner_flag_logic: string;
-    follow_up_questions: string[];
-    max_follow_up_iterations: number;
-    escalation_strategy: string;
-  };
-  concept_breakdown: {
-    concept: string;
-    llm_reasoning: string;
-    subtopics: string[];
-    real_world_connections: string[];
-    prerequisites: string[];
-    mastery_checks: string[];
-    remediation_plan: string;
-    advancement_cue: string;
-  }[];
-  teaching_modalities: {
-    modality: TutorTeachingModalityKind;
-    description: string;
-    resources: string[];
-  }[];
-  assessment: {
-    title: string;
-    format: string;
-    human_in_the_loop_notes: string;
-    items: {
-      prompt: string;
-      kind: "multiple_choice" | "short_answer" | "reflection" | "practical";
-      options?: string[] | null;
-      answer_key?: string | null;
-    }[];
-  };
-  completion: {
-    mastery_indicators: string[];
-    wrap_up_plan: string;
-    follow_up_suggestions: string[];
-  };
-  conversation_manager: {
-    agent_role: string;
-    topic_extraction_prompt: string;
-    level_assessment_summary: string;
-    containment_strategy: string;
-  };
-  learning_stages: {
+  manager: {
     name: string;
-    focus: string;
-    objectives: string[];
-    prerequisites: string[];
-    pass_criteria: string[];
-    quiz: {
-      prompt: string;
-      answer_key?: string | null;
-      remediation: string;
-    };
-    on_success: string;
-    on_failure: string;
-  }[];
+    mission: string;
+    rationale: string;
+    priorities: string[];
+    next_steps: string[];
+  };
+  agents: TutorManagerAgentReport[];
 };
 
 type AgentTask = {
@@ -154,6 +168,13 @@ type Message =
   | { id: string; role: AgentId; type: "tasks"; headline: string; tasks: string[] }
   | { id: string; role: AgentId; type: "loading" };
 
+type AgentPayloads = {
+  curriculum?: TutorCurriculumResponse;
+  assessment?: TutorAssessmentResponse;
+  practice?: TutorPracticeResponse;
+  coach?: TutorCoachResponse;
+};
+
 function formatDate(value: string) {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return value;
@@ -166,83 +187,400 @@ function formatDate(value: string) {
   });
 }
 
-function buildAgentTasks(plan: TutorModeResponse): AgentTask[] {
-  const strategistTasks = plan.learning_stages.slice(0, 4).map((stage) => {
-    const criteriaPreview = stage.pass_criteria[0] ?? "keep the learner engaged";
-    return `Architect stage "${stage.name}" focused on ${stage.focus}. Prioritise: ${criteriaPreview}.`;
+function isCurriculumReport(
+  agent: TutorManagerAgentReport,
+): agent is TutorManagerAgentReport & { payload: TutorCurriculumResponse } {
+  return agent.id === "curriculum";
+}
+
+function isAssessmentReport(
+  agent: TutorManagerAgentReport,
+): agent is TutorManagerAgentReport & { payload: TutorAssessmentResponse } {
+  return agent.id === "assessment";
+}
+
+function isPracticeReport(
+  agent: TutorManagerAgentReport,
+): agent is TutorManagerAgentReport & { payload: TutorPracticeResponse } {
+  return agent.id === "practice";
+}
+
+function isCoachReport(
+  agent: TutorManagerAgentReport,
+): agent is TutorManagerAgentReport & { payload: TutorCoachResponse } {
+  return agent.id === "coach";
+}
+
+function extractAgentPayloads(plan: TutorManagerResponse): AgentPayloads {
+  const payloads: AgentPayloads = {};
+
+  plan.agents.forEach((agent) => {
+    if (isCurriculumReport(agent)) {
+      payloads.curriculum = agent.payload;
+    }
+    if (isAssessmentReport(agent)) {
+      payloads.assessment = agent.payload;
+    }
+    if (isPracticeReport(agent)) {
+      payloads.practice = agent.payload;
+    }
+    if (isCoachReport(agent)) {
+      payloads.coach = agent.payload;
+    }
   });
 
-  const modalityTasks = plan.teaching_modalities.slice(0, 4).map((modality) => {
-    const resourcePreview = modality.resources[0]
-      ? `Highlight ${modality.resources[0]}`
-      : "Select supporting resources";
-    return `Craft a ${modality.modality} experience: ${modality.description}. ${resourcePreview}.`;
+  return payloads;
+}
+
+function buildAgentTasks(plan: TutorManagerResponse): AgentTask[] {
+  const payloads = extractAgentPayloads(plan);
+  const tasks: AgentTask[] = [];
+
+  tasks.push({
+    agentId: "manager",
+    headline: "Coordinate the tutoring collective",
+    tasks: [plan.manager.mission, plan.manager.rationale, ...plan.manager.priorities.slice(0, 2)],
   });
 
-  const assessmentTasks = [
-    `Design the "${plan.assessment.title}" assessment (${plan.assessment.format}).`,
-    plan.assessment.human_in_the_loop_notes,
-    ...plan.assessment.items.slice(0, 3).map((item, index) => {
-      const label = index + 1;
-      return `Draft item ${label}: ${item.prompt}`;
-    }),
-  ];
-
-  const coachTasks = [
-    `Kick off with: ${plan.understanding.approach}.`,
-    plan.understanding.diagnostic_questions[0]
-      ? `Use diagnostic question: ${plan.understanding.diagnostic_questions[0]}`
-      : "Prepare diagnostic follow-ups.",
-    `Watch for: ${plan.understanding.signals_to_watch.slice(0, 2).join(", ")}.`,
-    `Wrap-up plan: ${plan.completion.wrap_up_plan}.`,
-  ];
-
-  const managerTasks = [
-    plan.conversation_manager.agent_role,
-    `Topic extraction focus: ${plan.conversation_manager.topic_extraction_prompt}.`,
-    `Level insights: ${plan.conversation_manager.level_assessment_summary}.`,
-    `Containment strategy: ${plan.conversation_manager.containment_strategy}.`,
-  ];
-
-  return [
-    {
-      agentId: "manager",
-      headline: "Coordinate the tutoring collective",
-      tasks: managerTasks,
-    },
-    {
-      agentId: "strategist",
+  if (payloads.curriculum) {
+    const sessionHighlights = payloads.curriculum.sessions
+      .slice(0, 3)
+      .map((session) => `${session.title} → emphasise ${session.learning_modality} moves.`);
+    tasks.push({
+      agentId: "curriculum",
       headline: "Design the learning journey",
-      tasks: strategistTasks.length > 0
-        ? strategistTasks
-        : ["Outline staged progression to cover the concept effectively."],
-    },
-    {
-      agentId: "researcher",
-      headline: "Curate multi-modal experiences",
-      tasks: modalityTasks.length > 0
-        ? modalityTasks
-        : ["Select supporting resources and craft explanations across modalities."],
-    },
-    {
+      tasks: [payloads.curriculum.summary, ...sessionHighlights],
+    });
+  }
+
+  if (payloads.practice) {
+    const practiceHighlights = payloads.practice.sprints
+      .slice(0, 2)
+      .map((sprint) => `${sprint.name}: ${sprint.focus}`);
+    tasks.push({
+      agentId: "practice",
+      headline: "Curate practice loops",
+      tasks: [...payloads.practice.warmups.slice(0, 1), ...practiceHighlights],
+    });
+  }
+
+  if (payloads.assessment) {
+    const questionSnippets = payloads.assessment.questions
+      .slice(0, 2)
+      .map((question, index) => `Item ${index + 1}: ${question.prompt}`);
+    tasks.push({
       agentId: "assessment",
       headline: "Engineer mastery checks",
-      tasks: assessmentTasks.length > 0
-        ? assessmentTasks
-        : ["Build assessments that surface understanding and misconceptions."],
-    },
-    {
+      tasks: [payloads.assessment.description, ...questionSnippets],
+    });
+  }
+
+  if (payloads.coach) {
+    const coachingMoments = payloads.coach.check_ins
+      .slice(0, 2)
+      .map((checkpoint) => `${checkpoint.milestone}: ${checkpoint.prompt}`);
+    tasks.push({
       agentId: "coach",
-      headline: "Coach the learner through the plan",
-      tasks: coachTasks.length > 0
-        ? coachTasks
-        : ["Monitor understanding signals and celebrate progress."],
-    },
-  ];
+      headline: "Coach the learner through",
+      tasks: [payloads.coach.onboarding_message, ...coachingMoments],
+    });
+  }
+
+  return tasks;
 }
 
 function AgentGlyph({ className, ...props }: SVGProps<SVGSVGElement>) {
   return <Sparkles className={cn("h-4 w-4", className)} {...props} />;
+}
+
+function CurriculumPanel({ curriculum }: { curriculum: TutorCurriculumResponse }) {
+  return (
+    <div className="rounded-3xl border border-slate-900/70 bg-slate-950/60 p-6 shadow-xl shadow-slate-950/50">
+      <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Curriculum roadmap</p>
+      <h3 className="mt-2 text-lg font-semibold text-white">{curriculum.summary}</h3>
+      <p className="mt-3 text-sm text-slate-300">
+        Horizon: <span className="font-medium text-white">{curriculum.horizon}</span>
+      </p>
+      <div className="mt-4 space-y-4">
+        {curriculum.sessions.map((session) => (
+          <div
+            key={session.id}
+            className="rounded-2xl border border-slate-900/60 bg-slate-900/60 p-4"
+          >
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-semibold text-white">{session.title}</p>
+              <span className="text-xs uppercase text-slate-500">{session.duration}</span>
+            </div>
+            <p className="mt-2 text-sm text-slate-300">{session.focus}</p>
+            <p className="mt-2 text-xs uppercase tracking-[0.2em] text-slate-500">
+              Modality: {session.learning_modality}
+            </p>
+            <ul className="mt-3 space-y-2 text-sm text-slate-200">
+              {session.objectives.map((objective, index) => (
+                <li key={index} className="flex items-start gap-2">
+                  <AgentGlyph className="mt-0.5 h-3.5 w-3.5 text-emerald-400" />
+                  <span>{objective}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="mt-3 text-xs text-slate-400">
+              Practice: <span className="text-slate-300">{session.practice_opportunity}</span>
+            </p>
+          </div>
+        ))}
+      </div>
+      <div className="mt-5 rounded-2xl border border-slate-900/60 bg-slate-900/60 p-4">
+        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Capstone</p>
+        <p className="mt-2 text-sm text-slate-200">{curriculum.capstone_project}</p>
+        <p className="mt-3 text-xs uppercase tracking-[0.3em] text-slate-500">Enrichment</p>
+        <ul className="mt-2 space-y-2 text-sm text-slate-200">
+          {curriculum.enrichment.map((item, index) => (
+            <li key={index} className="flex items-start gap-2">
+              <AgentGlyph className="mt-0.5 h-3.5 w-3.5 text-sky-400" />
+              <span>{item}</span>
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
+
+function PracticePanel({ practice }: { practice: TutorPracticeResponse }) {
+  return (
+    <div className="rounded-3xl border border-slate-900/70 bg-slate-950/60 p-6 shadow-xl shadow-slate-950/50">
+      <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Practice lab</p>
+      <h3 className="mt-2 text-lg font-semibold text-white">Stay accountable while applying the craft</h3>
+      <div className="mt-4 space-y-4">
+        <div className="rounded-2xl border border-slate-900/60 bg-slate-900/60 p-4">
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Warmups</p>
+          <ul className="mt-2 space-y-2 text-sm text-slate-200">
+            {practice.warmups.map((warmup, index) => (
+              <li key={index} className="flex items-start gap-2">
+                <AgentGlyph className="mt-0.5 h-3.5 w-3.5 text-amber-400" />
+                <span>{warmup}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="space-y-4">
+          {practice.sprints.map((sprint) => (
+            <div
+              key={sprint.name}
+              className="rounded-2xl border border-slate-900/60 bg-slate-900/60 p-4"
+            >
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold text-white">{sprint.name}</p>
+                <span className="text-xs uppercase text-slate-500">{sprint.cadence}</span>
+              </div>
+              <p className="mt-2 text-sm text-slate-300">{sprint.focus}</p>
+              <ul className="mt-3 space-y-2 text-sm text-slate-200">
+                {sprint.checkpoints.map((checkpoint, index) => (
+                  <li key={index} className="flex items-start gap-2">
+                    <AgentGlyph className="mt-0.5 h-3.5 w-3.5 text-emerald-400" />
+                    <span>{checkpoint}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+        <div className="rounded-2xl border border-slate-900/60 bg-slate-900/60 p-4">
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Accountability moves</p>
+          <ul className="mt-2 space-y-2 text-sm text-slate-200">
+            {practice.accountability.map((item, index) => (
+              <li key={index} className="flex items-start gap-2">
+                <AgentGlyph className="mt-0.5 h-3.5 w-3.5 text-purple-400" />
+                <span>{item}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CoachPanel({ coach }: { coach: TutorCoachResponse }) {
+  return (
+    <div className="rounded-3xl border border-slate-900/70 bg-slate-950/60 p-6 shadow-xl shadow-slate-950/50">
+      <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Coaching playbook</p>
+      <h3 className="mt-2 text-lg font-semibold text-white">{coach.onboarding_message}</h3>
+      <div className="mt-4 space-y-4">
+        {coach.check_ins.map((checkpoint) => (
+          <div
+            key={checkpoint.milestone}
+            className="rounded-2xl border border-slate-900/60 bg-slate-900/60 p-4"
+          >
+            <p className="text-sm font-semibold text-white">{checkpoint.milestone}</p>
+            <p className="mt-2 text-sm text-slate-300">{checkpoint.prompt}</p>
+            <p className="mt-3 text-xs text-emerald-400">
+              Success signal: <span className="text-slate-200">{checkpoint.success_signal}</span>
+            </p>
+            <p className="mt-2 text-xs text-slate-400">
+              Support plan: <span className="text-slate-200">{checkpoint.support_plan}</span>
+            </p>
+          </div>
+        ))}
+      </div>
+      <div className="mt-5 grid gap-4 lg:grid-cols-2">
+        <div className="rounded-2xl border border-slate-900/60 bg-slate-900/60 p-4">
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Celebrations</p>
+          <ul className="mt-2 space-y-2 text-sm text-slate-200">
+            {coach.celebration_rituals.map((ritual, index) => (
+              <li key={index} className="flex items-start gap-2">
+                <AgentGlyph className="mt-0.5 h-3.5 w-3.5 text-amber-400" />
+                <span>{ritual}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="rounded-2xl border border-slate-900/60 bg-slate-900/60 p-4">
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Escalation paths</p>
+          <ul className="mt-2 space-y-2 text-sm text-slate-200">
+            {coach.escalation_paths.map((path, index) => (
+              <li key={index} className="flex items-start gap-2">
+                <AgentGlyph className="mt-0.5 h-3.5 w-3.5 text-rose-400" />
+                <span>{path}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function QuizPanel({
+  assessment,
+  quizResponses,
+  quizResults,
+  quizSubmitted,
+  onChange,
+  onSubmit,
+}: {
+  assessment: TutorAssessmentResponse;
+  quizResponses: Record<string, string>;
+  quizResults: Record<string, { correct: boolean; answer: string }>;
+  quizSubmitted: boolean;
+  onChange: (questionId: string, value: string) => void;
+  onSubmit: (event: FormEvent<HTMLFormElement>) => void;
+}) {
+  const allCorrect = useMemo(() => {
+    if (!quizSubmitted) return false;
+    return assessment.questions.every((question) => quizResults[question.id]?.correct);
+  }, [quizResults, quizSubmitted, assessment.questions]);
+
+  return (
+    <div className="rounded-3xl border border-slate-900/70 bg-slate-950/60 p-6 shadow-xl shadow-slate-950/50 lg:col-span-2">
+      <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Assessment lab</p>
+      <h3 className="mt-2 text-lg font-semibold text-white">{assessment.title}</h3>
+      <p className="mt-2 text-sm text-slate-300">{assessment.description}</p>
+      <p className="mt-1 text-xs uppercase tracking-[0.2em] text-slate-500">
+        Duration: {assessment.duration}
+      </p>
+      <form onSubmit={onSubmit} className="mt-5 space-y-6">
+        {assessment.questions.map((question) => {
+          const response = quizResponses[question.id] ?? "";
+          const result = quizResults[question.id];
+          const isMultipleChoice = question.kind === "multiple_choice";
+
+          return (
+            <div
+              key={question.id}
+              className="rounded-2xl border border-slate-900/60 bg-slate-900/60 p-5"
+            >
+              <div className="flex items-start justify-between gap-3">
+                <p className="text-sm font-semibold text-white">
+                  {question.prompt}
+                </p>
+                <span className="text-xs uppercase tracking-[0.2em] text-slate-500">
+                  {isMultipleChoice ? "Multiple choice" : "Short answer"}
+                </span>
+              </div>
+              {isMultipleChoice ? (
+                <div className="mt-3 space-y-2">
+                  {question.options?.map((option) => (
+                    <label
+                      key={option}
+                      className={cn(
+                        "flex cursor-pointer items-center gap-2 rounded-xl border border-slate-900/60 bg-slate-950/40 px-3 py-2 text-sm text-slate-200 transition",
+                        response === option && "border-emerald-500/60 bg-emerald-500/10 text-white",
+                      )}
+                    >
+                      <input
+                        type="radio"
+                        name={question.id}
+                        value={option}
+                        checked={response === option}
+                        onChange={() => onChange(question.id, option)}
+                        className="hidden"
+                      />
+                      <span>{option}</span>
+                    </label>
+                  ))}
+                </div>
+              ) : (
+                <textarea
+                  value={response}
+                  onChange={(event) => onChange(question.id, event.target.value)}
+                  rows={3}
+                  className="mt-3 w-full resize-none rounded-xl border border-slate-900/60 bg-slate-950/40 px-3 py-2 text-sm text-slate-200 focus:border-emerald-500/60 focus:outline-none"
+                  placeholder="Type your reflection"
+                />
+              )}
+              {quizSubmitted && result && (
+                <div
+                  className={cn(
+                    "mt-3 rounded-xl border px-3 py-2 text-sm",
+                    result.correct
+                      ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-300"
+                      : "border-rose-500/40 bg-rose-500/10 text-rose-200",
+                  )}
+                >
+                  <p className="font-semibold">
+                    {result.correct ? "Correct" : "Let's review"}
+                  </p>
+                  {!result.correct && (
+                    <p className="mt-1 text-xs text-slate-200">
+                      Answer: <span className="font-medium text-white">{result.answer}</span>
+                    </p>
+                  )}
+                  <p className="mt-1 text-xs text-slate-200">{question.rationale}</p>
+                </div>
+              )}
+            </div>
+          );
+        })}
+        <div className="flex items-center justify-between">
+          <div className="text-xs text-slate-500">
+            {assessment.grading_notes.map((note, index) => (
+              <p key={index} className="mt-1">
+                {note}
+              </p>
+            ))}
+          </div>
+          <Button type="submit" className="min-w-[160px] bg-emerald-500 text-slate-950 hover:bg-emerald-400">
+            {quizSubmitted ? "Retake quiz" : "Submit answers"}
+          </Button>
+        </div>
+        {quizSubmitted && (
+          <div
+            className={cn(
+              "rounded-2xl border px-4 py-3 text-sm",
+              allCorrect
+                ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-200"
+                : "border-amber-500/60 bg-amber-500/10 text-amber-200",
+            )}
+          >
+            {allCorrect
+              ? "Flawless run! Ready to level-up the challenge."
+              : "Great effort—review the notes above and adjust your plan."}
+          </div>
+        )}
+      </form>
+    </div>
+  );
 }
 
 export default function TutorModePage(): JSX.Element {
@@ -252,12 +590,18 @@ export default function TutorModePage(): JSX.Element {
       id: "welcome",
       role: "manager",
       type: "text",
-      text: "Hey there! I'm the GPT-5 tutor manager. What would you love to learn or get unstuck on today?",
+      text: "Hi there! I'm the GPT-5 tutor manager. Tell me what you want to learn and I'll assemble the right agents.",
     },
   ]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [latestPlan, setLatestPlan] = useState<TutorModeResponse | null>(null);
+  const [managerPlan, setManagerPlan] = useState<TutorManagerResponse | null>(null);
+  const [agentPayloads, setAgentPayloads] = useState<AgentPayloads>({});
   const [assignmentBoard, setAssignmentBoard] = useState<AgentTask[]>([]);
+  const [quizResponses, setQuizResponses] = useState<Record<string, string>>({});
+  const [quizResults, setQuizResults] = useState<
+    Record<string, { correct: boolean; answer: string }>
+  >({});
+  const [quizSubmitted, setQuizSubmitted] = useState(false);
   const chatViewportRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -265,10 +609,16 @@ export default function TutorModePage(): JSX.Element {
     chatViewportRef.current.scrollTop = chatViewportRef.current.scrollHeight;
   }, [messages]);
 
+  useEffect(() => {
+    setQuizResponses({});
+    setQuizResults({});
+    setQuizSubmitted(false);
+  }, [agentPayloads.assessment?.title]);
+
   const formattedTimestamp = useMemo(() => {
-    if (!latestPlan) return null;
-    return formatDate(latestPlan.generated_at);
-  }, [latestPlan]);
+    if (!managerPlan) return null;
+    return formatDate(managerPlan.generated_at);
+  }, [managerPlan]);
 
   const handleKeyDown = useCallback((event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === "Enter" && !event.shiftKey) {
@@ -276,6 +626,38 @@ export default function TutorModePage(): JSX.Element {
       event.currentTarget.form?.requestSubmit();
     }
   }, []);
+
+  const handleQuizChange = useCallback((questionId: string, value: string) => {
+    setQuizResponses((previous) => ({ ...previous, [questionId]: value }));
+  }, []);
+
+  const handleQuizSubmit = useCallback(
+    (event: FormEvent<HTMLFormElement>) => {
+      event.preventDefault();
+      if (!agentPayloads.assessment) {
+        return;
+      }
+
+      const results: Record<string, { correct: boolean; answer: string }> = {};
+
+      agentPayloads.assessment.questions.forEach((question) => {
+        const userAnswer = (quizResponses[question.id] ?? "").trim();
+        let correct = false;
+
+        if (question.kind === "multiple_choice") {
+          correct = userAnswer === question.answer;
+        } else {
+          correct = userAnswer.toLowerCase() === question.answer.trim().toLowerCase();
+        }
+
+        results[question.id] = { correct, answer: question.answer };
+      });
+
+      setQuizResults(results);
+      setQuizSubmitted(true);
+    },
+    [agentPayloads.assessment, quizResponses],
+  );
 
   const handleSubmit = useCallback(
     async (event: FormEvent<HTMLFormElement>) => {
@@ -319,10 +701,12 @@ export default function TutorModePage(): JSX.Element {
           throw new Error("Unable to generate a tutor plan right now.");
         }
 
-        const data: TutorModeResponse = await response.json();
+        const data: TutorManagerResponse = await response.json();
+        const payloads = extractAgentPayloads(data);
         const tasks = buildAgentTasks(data);
 
-        setLatestPlan(data);
+        setManagerPlan(data);
+        setAgentPayloads(payloads);
         setAssignmentBoard(tasks);
 
         setMessages((previous) =>
@@ -335,7 +719,7 @@ export default function TutorModePage(): JSX.Element {
               id: `manager-summary-${Date.now()}`,
               role: "manager",
               type: "text",
-              text: `Deploying ${tasks.length} specialist agents to help you master "${data.topic}". Here's how we're dividing the work:`,
+              text: `${data.manager.name} dispatched ${data.agents.length} specialists. ${data.manager.rationale}`,
             };
 
             const taskMessages: Message[] = tasks.map((task, index) => ({
@@ -347,7 +731,7 @@ export default function TutorModePage(): JSX.Element {
             }));
 
             return [managerSummary, ...taskMessages];
-          })
+          }),
         );
       } catch (error) {
         console.error("Tutor mode request failed", error);
@@ -360,14 +744,14 @@ export default function TutorModePage(): JSX.Element {
                   type: "text",
                   text: "I ran into an issue reaching the tutor service. Let's try that again in a moment.",
                 }
-              : message
-          )
+              : message,
+          ),
         );
       } finally {
         setIsSubmitting(false);
       }
     },
-    [inputValue]
+    [inputValue],
   );
 
   const renderMessage = useCallback((message: Message) => {
@@ -403,7 +787,7 @@ export default function TutorModePage(): JSX.Element {
           <div
             className={cn(
               "mt-1 flex h-10 w-10 items-center justify-center rounded-full border border-slate-700/60 bg-slate-900",
-              agent ? "text-white" : "text-slate-200"
+              agent ? "text-white" : "text-slate-200",
             )}
           >
             <Icon className="h-5 w-5" />
@@ -421,7 +805,7 @@ export default function TutorModePage(): JSX.Element {
           <div
             className={cn(
               "mt-1 flex h-10 w-10 items-center justify-center rounded-full border border-slate-700/60 bg-slate-900",
-              agent ? "text-white" : "text-slate-200"
+              agent ? "text-white" : "text-slate-200",
             )}
           >
             <Icon className="h-5 w-5" />
@@ -483,7 +867,7 @@ export default function TutorModePage(): JSX.Element {
                 <div
                   className={cn(
                     "absolute -top-10 right-0 h-24 w-24 rounded-full bg-gradient-to-br blur-2xl",
-                    agent.accent
+                    agent.accent,
                   )}
                 />
                 <div className="relative flex h-12 w-12 items-center justify-center rounded-full border border-slate-800/80 bg-slate-950/70 text-white">
@@ -520,7 +904,11 @@ export default function TutorModePage(): JSX.Element {
                   <p className="text-xs text-slate-500">
                     Tip: press <span className="font-semibold text-slate-300">Shift + Enter</span> for a new line.
                   </p>
-                  <Button type="submit" disabled={isSubmitting} className="min-w-[140px] bg-emerald-500 text-slate-950 hover:bg-emerald-400">
+                  <Button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="min-w-[140px] bg-emerald-500 text-slate-950 hover:bg-emerald-400"
+                  >
                     {isSubmitting ? (
                       <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -540,7 +928,7 @@ export default function TutorModePage(): JSX.Element {
               <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Live assignments</p>
               <h2 className="mt-2 text-lg font-semibold text-white">Agent task board</h2>
               <p className="mt-2 text-sm text-slate-400">
-                Each specialist receives a slice of the plan after the manager confers with GPT-5.
+                Each specialist receives a slice of the plan after the manager coordinates with GPT-5.
               </p>
               {assignmentBoard.length === 0 ? (
                 <div className="mt-6 rounded-2xl border border-slate-900/60 bg-slate-900/50 p-5 text-sm text-slate-400">
@@ -585,30 +973,30 @@ export default function TutorModePage(): JSX.Element {
               )}
             </div>
 
-            {latestPlan && (
+            {managerPlan && (
               <div className="rounded-3xl border border-slate-900/70 bg-slate-950/60 p-6 shadow-xl shadow-slate-950/60">
                 <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Latest GPT-5 intel</p>
                 <h2 className="mt-2 text-lg font-semibold text-white">Plan snapshot</h2>
                 <div className="mt-4 space-y-4 text-sm text-slate-200">
                   <div>
                     <p className="text-xs uppercase text-slate-500">Topic</p>
-                    <p className="mt-1 text-base text-white">{latestPlan.topic}</p>
+                    <p className="mt-1 text-base text-white">{managerPlan.topic}</p>
                   </div>
                   <div>
                     <p className="text-xs uppercase text-slate-500">Learner profile</p>
-                    <p className="mt-1 text-slate-300">{latestPlan.learner_profile}</p>
+                    <p className="mt-1 text-slate-300">{managerPlan.learner_profile}</p>
                   </div>
                   <div>
-                    <p className="text-xs uppercase text-slate-500">Objectives</p>
+                    <p className="text-xs uppercase text-slate-500">Manager priorities</p>
                     <ul className="mt-2 space-y-1 text-slate-300">
-                      {latestPlan.objectives.slice(0, 4).map((objective, index) => (
-                        <li key={index}>{objective}</li>
+                      {managerPlan.manager.priorities.slice(0, 3).map((priority, index) => (
+                        <li key={index}>{priority}</li>
                       ))}
                     </ul>
                   </div>
                   <div>
                     <p className="text-xs uppercase text-slate-500">Model</p>
-                    <p className="mt-1 text-slate-300">{latestPlan.model}</p>
+                    <p className="mt-1 text-slate-300">{managerPlan.model}</p>
                   </div>
                   {formattedTimestamp && (
                     <div>
@@ -621,7 +1009,37 @@ export default function TutorModePage(): JSX.Element {
             )}
           </aside>
         </div>
+
+        {(agentPayloads.curriculum ||
+          agentPayloads.practice ||
+          agentPayloads.assessment ||
+          agentPayloads.coach) && (
+          <section className="rounded-3xl border border-slate-900/70 bg-slate-950/60 p-6 shadow-2xl shadow-slate-950/60">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Agent output stream</p>
+                <h2 className="mt-2 text-xl font-semibold text-white">Review what each specialist produced</h2>
+              </div>
+            </div>
+            <div className="mt-6 grid gap-6 lg:grid-cols-2">
+              {agentPayloads.curriculum && <CurriculumPanel curriculum={agentPayloads.curriculum} />}
+              {agentPayloads.practice && <PracticePanel practice={agentPayloads.practice} />}
+              {agentPayloads.assessment && (
+                <QuizPanel
+                  assessment={agentPayloads.assessment}
+                  quizResponses={quizResponses}
+                  quizResults={quizResults}
+                  quizSubmitted={quizSubmitted}
+                  onChange={handleQuizChange}
+                  onSubmit={handleQuizSubmit}
+                />
+              )}
+              {agentPayloads.coach && <CoachPanel coach={agentPayloads.coach} />}
+            </div>
+          </section>
+        )}
       </div>
     </div>
   );
 }
+

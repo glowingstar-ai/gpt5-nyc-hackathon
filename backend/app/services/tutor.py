@@ -1,430 +1,499 @@
-"""Tutor mode orchestration powered by GPT-5 (with graceful fallbacks)."""
+"""Services that power the multi-agent Tutor Mode experience."""
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from textwrap import dedent
-from typing import Any
-
-import httpx
+from typing import Iterable
 
 from app.schemas.tutor import (
-    TutorConversationManager,
-    TutorAssessmentItem,
-    TutorAssessmentPlan,
-    TutorCompletionPlan,
-    TutorConceptBreakdown,
-    TutorLearningStage,
+    TutorCoachCheckpoint,
+    TutorCoachResponse,
+    TutorCurriculumResponse,
+    TutorCurriculumSession,
+    TutorManagerAgentReport,
+    TutorManagerProfile,
+    TutorManagerResponse,
     TutorModeRequest,
-    TutorModeResponse,
-    TutorStageQuiz,
-    TutorTeachingModality,
-    TutorUnderstandingPlan,
+    TutorPracticeResponse,
+    TutorPracticeSprint,
+    TutorAssessmentQuestion,
+    TutorAssessmentResponse,
 )
 
 
+def _ensure_list(values: Iterable[str] | None) -> list[str]:
+    """Return a list with any falsey values removed."""
+
+    if not values:
+        return []
+    return [value for value in values if value]
+
+
+def _infer_level(student_level: str | None) -> str:
+    """Generate a short descriptor for the learner's self-reported level."""
+
+    if not student_level:
+        return "curious explorer"
+
+    lowered = student_level.lower()
+    if any(keyword in lowered for keyword in {"beginner", "new", "first time"}):
+        return "early-stage learner"
+    if any(keyword in lowered for keyword in {"intermediate", "practiced", "some"}):
+        return "growing practitioner"
+    if any(keyword in lowered for keyword in {"advanced", "expert", "professional"}):
+        return "seasoned builder"
+    return student_level
+
+
+def _profile_summary(payload: TutorModeRequest) -> str:
+    """Compose a friendly learner profile summary."""
+
+    goals = ", ".join(_ensure_list(payload.goals)) or "sharpen understanding"
+    modalities = (
+        ", ".join(_ensure_list(payload.preferred_modalities))
+        or "whichever modality keeps energy high"
+    )
+    context = payload.additional_context.strip() if payload.additional_context else ""
+    level = _infer_level(payload.student_level)
+
+    parts = [f"Learner is a {level} focused on {goals} within {payload.topic}."]
+    parts.append(f"Preferred modalities: {modalities}.")
+    if context:
+        parts.append(f"Extra context: {context}.")
+    return " ".join(parts)
+
+
+class TutorCurriculumAgent:
+    """Generates a staged curriculum plan without calling external APIs."""
+
+    def __init__(self, *, model: str) -> None:
+        self.model = model
+
+    def run(self, payload: TutorModeRequest) -> TutorCurriculumResponse:
+        level = _infer_level(payload.student_level)
+        goals = _ensure_list(payload.goals) or [
+            f"Build a conceptual map of {payload.topic}",
+            f"Practice applying {payload.topic} in small scenarios",
+        ]
+        modality_note = (
+            _ensure_list(payload.preferred_modalities) or ["visual", "interactive"]
+        )
+
+        sessions: list[TutorCurriculumSession] = [
+            TutorCurriculumSession(
+                id="launch",
+                title=f"Launchpad: discover why {payload.topic} matters",
+                focus="Elicit prior knowledge and align on the learner's goals",
+                duration="45 minutes",
+                objectives=[
+                    f"Capture what {level} learners already associate with {payload.topic}",
+                    "Surface motivation, constraints, and success markers",
+                ],
+                learning_modality="verbal",
+                core_activities=[
+                    "Guided dialogue using a concept map canvas",
+                    "Mini-story that situates the topic in the learner's world",
+                ],
+                practice_opportunity=
+                    "Write a two-sentence explanation of the topic for a friend and note uncertainties.",
+            ),
+            TutorCurriculumSession(
+                id="decode",
+                title=f"Decode the core building blocks of {payload.topic}",
+                focus="Introduce the minimum lovable theory and vocabulary",
+                duration="60 minutes",
+                objectives=[
+                    f"Explain the headline components that make up {payload.topic}",
+                    "Model how the pieces interact with a simplified diagram",
+                ],
+                learning_modality="visual",
+                core_activities=[
+                    "Layered diagram walk-through with annotations",
+                    "Think-aloud comparison between a strong and weak example",
+                ],
+                practice_opportunity=
+                    "Match each component to a description and justify the pairing verbally.",
+            ),
+            TutorCurriculumSession(
+                id="build",
+                title=f"Build and experiment with {payload.topic}",
+                focus="Move from theory into guided application",
+                duration="75 minutes",
+                objectives=[
+                    "Translate concepts into a simple hands-on task",
+                    "Surface misconceptions quickly with feedback loops",
+                ],
+                learning_modality="interactive",
+                core_activities=[
+                    "Live-coding or sandbox exploration with check-point rubrics",
+                    "Peer review or rubber-duck debugging to articulate reasoning",
+                ],
+                practice_opportunity=
+                    "Ship a micro-project aligned with one learning goal and record a quick retrospective.",
+            ),
+            TutorCurriculumSession(
+                id="stretch",
+                title=f"Stretch and transfer {payload.topic} mastery",
+                focus="Drive metacognition and plan continued practice",
+                duration="45 minutes",
+                objectives=[
+                    "Reflect on growth and articulate next-level challenges",
+                    "Plan how to sustain momentum with spaced practice",
+                ],
+                learning_modality="blended",
+                core_activities=[
+                    "Socratic reflection on wins, wobbles, and adjustments",
+                    "Design a personal practice cadence that fits constraints",
+                ],
+                practice_opportunity=
+                    "Outline a two-week action plan with confidence ratings for each milestone.",
+            ),
+        ]
+
+        enrichment = [
+            f"Bookmark a mentor-quality talk or article that makes {payload.topic} feel tangible",
+            "Join a community space to swap progress updates once a week",
+            f"Track one 'aha' moment per session focused on {payload.topic}",
+        ]
+
+        summary = (
+            f"Sequenced {len(sessions)}-session journey emphasising {', '.join(modality_note)} "
+            f"modalities so a {level} can reach goals like {goals[0].lower()}"
+        )
+
+        return TutorCurriculumResponse(
+            topic=payload.topic,
+            summary=summary,
+            horizon="2-week sprint" if level != "seasoned builder" else "Fast-track intensive",
+            sessions=sessions,
+            capstone_project=(
+                f"Design a capstone that applies {payload.topic} to one of the learner's goals. "
+                "Deliver a short demo or write-up that captures decision points and trade-offs."
+            ),
+            enrichment=enrichment,
+        )
+
+
+class TutorAssessmentAgent:
+    """Creates a formative quiz with answer keys."""
+
+    def __init__(self, *, model: str) -> None:
+        self.model = model
+
+    def run(self, payload: TutorModeRequest) -> TutorAssessmentResponse:
+        topic = payload.topic
+        level = _infer_level(payload.student_level)
+
+        questions: list[TutorAssessmentQuestion] = [
+            TutorAssessmentQuestion(
+                id="q1",
+                prompt=f"Which statement best captures the primary purpose of {topic}?",
+                kind="multiple_choice",
+                options=[
+                    f"It provides a framework to reason about {topic} scenarios",
+                    f"It is mainly historical trivia unrelated to {topic}",
+                    "It replaces foundational skills with automation",
+                    "It focuses exclusively on memorising terminology",
+                ],
+                answer=f"It provides a framework to reason about {topic} scenarios",
+                rationale="Learners demonstrate conceptual understanding when they can state why the topic exists.",
+            ),
+            TutorAssessmentQuestion(
+                id="q2",
+                prompt=f"List one real-world situation where {topic} becomes especially useful.",
+                kind="short_answer",
+                answer=f"Any scenario that aligns with the learner's goals while leveraging {topic} for impact",
+                rationale="Short answer checks transfer—any thoughtful example tied to their context earns credit.",
+            ),
+            TutorAssessmentQuestion(
+                id="q3",
+                prompt=f"Which option describes a healthy troubleshooting move when practising {topic}?",
+                kind="multiple_choice",
+                options=[
+                    "Ignore feedback signals and push through",
+                    "Pause to inspect inputs/assumptions before continuing",
+                    "Restart the project from scratch every time",
+                    "Rely solely on pre-written solutions",
+                ],
+                answer="Pause to inspect inputs/assumptions before continuing",
+                rationale="Metacognitive troubleshooting is a key mastery indicator for resilient learners.",
+            ),
+            TutorAssessmentQuestion(
+                id="q4",
+                prompt=f"Name one metric or signal that would show you are improving with {topic}.",
+                kind="short_answer",
+                answer="Any measurable improvement aligned with their goals (accuracy, speed, confidence, learner-defined value)",
+                rationale="Invites personalisation—credit is awarded for thoughtful, relevant metrics.",
+            ),
+            TutorAssessmentQuestion(
+                id="q5",
+                prompt="When stuck, which escalation path keeps learning momentum healthy?",
+                kind="multiple_choice",
+                options=[
+                    "Stay silent to avoid judgement",
+                    "Ask for targeted feedback while sharing attempts so far",
+                    "Abandon the learning sprint entirely",
+                    "Copy answers from a solution bank",
+                ],
+                answer="Ask for targeted feedback while sharing attempts so far",
+                rationale="Shows willingness to collaborate and builds coaching loops into the plan.",
+            ),
+        ]
+
+        grading_notes = [
+            f"Look for answers that connect {topic} to the learner's stated goals.",
+            "Reward explicit reasoning and evidence of iteration.",
+            "Encourage reflection where responses surface misconceptions to revisit during coaching.",
+        ]
+
+        description = (
+            f"A quick diagnostic for a {level} to check comprehension, application, and coaching readiness."
+        )
+
+        return TutorAssessmentResponse(
+            title=f"{topic} mastery pulse",
+            description=description,
+            duration="Approx. 15 minutes",
+            grading_notes=grading_notes,
+            questions=questions,
+        )
+
+
+class TutorPracticeAgent:
+    """Outlines hands-on practice sprints and routines."""
+
+    def __init__(self, *, model: str) -> None:
+        self.model = model
+
+    def run(self, payload: TutorModeRequest) -> TutorPracticeResponse:
+        topic = payload.topic
+        goals = _ensure_list(payload.goals) or [f"Apply {topic} confidently"]
+
+        sprints = [
+            TutorPracticeSprint(
+                name="Foundations warm-up",
+                cadence="Daily 10-minute reps",
+                focus=f"Micro-drills that reinforce the essential moves inside {topic}",
+                checkpoints=[
+                    "Log one insight per rep in a learning journal",
+                    "Share a quick loom or screenshot recap twice a week",
+                ],
+            ),
+            TutorPracticeSprint(
+                name="Guided project lap",
+                cadence="3 sessions across the week",
+                focus=f"Ship a tiny project that reflects goal: {goals[0]}",
+                checkpoints=[
+                    "Define success criteria before starting",
+                    "Schedule midpoint feedback with a peer or mentor",
+                    "Publish a short retrospective noting wins and wobbles",
+                ],
+            ),
+            TutorPracticeSprint(
+                name="Stretch and transfer",
+                cadence="Weekly challenge",
+                focus="Explore an unfamiliar dataset, audience, or constraint to prevent plateauing",
+                checkpoints=[
+                    "Document what changed from the original plan and why",
+                    "Flag one question to research further and add to backlog",
+                ],
+            ),
+        ]
+
+        warmups = [
+            f"2-minute breath or movement reset before tackling {topic} work",
+            "Review yesterday's learning highlight and today's focus",
+            "Preview potential blockers and jot down one mitigation tactic",
+        ]
+
+        accountability = [
+            "Publish progress snapshots at a consistent cadence",
+            "Pair up with an accountability buddy for weekly syncs",
+            "Use colour-coded tags (win, wobble, next) to make reflection lightweight",
+        ]
+
+        return TutorPracticeResponse(
+            topic=topic,
+            warmups=warmups,
+            sprints=sprints,
+            accountability=accountability,
+        )
+
+
+class TutorCoachAgent:
+    """Provides coaching checkpoints and escalation strategies."""
+
+    def __init__(self, *, model: str) -> None:
+        self.model = model
+
+    def run(self, payload: TutorModeRequest) -> TutorCoachResponse:
+        topic = payload.topic
+        level = _infer_level(payload.student_level)
+
+        check_ins = [
+            TutorCoachCheckpoint(
+                milestone="Kick-off",
+                prompt="Share your motivation and what a win looks like for you this week.",
+                success_signal="Learner articulates a concrete outcome and energy level",
+                support_plan="Mirror back their goals and co-create success metrics tied to the curriculum roadmap.",
+            ),
+            TutorCoachCheckpoint(
+                milestone="After first build session",
+                prompt=f"Walk me through the choices you made while practising {topic}. What felt smooth?",
+                success_signal="Learner references key concepts and evaluates their own process",
+                support_plan="Celebrate progress, then use assessment insights to shape the next sprint.",
+            ),
+            TutorCoachCheckpoint(
+                milestone="Pre-capstone",
+                prompt="What evidence shows you're ready for the capstone? Anything still fuzzy?",
+                success_signal="Learner surfaces proof of understanding and identifies gaps",
+                support_plan="If gaps remain, route back to targeted warmups or pair programming time.",
+            ),
+            TutorCoachCheckpoint(
+                milestone="Celebration",
+                prompt="Name the skill you're most proud of and the next experiment you'll run.",
+                success_signal="Learner highlights growth and sets a forward-looking commitment",
+                support_plan="Document the celebration, share recognition, and lock in their next accountability moment.",
+            ),
+        ]
+
+        onboarding_message = (
+            f"Welcome! I'm your coaching partner focused on helping a {level} stay confident with {topic}."
+        )
+
+        celebration_rituals = [
+            "Capture a 60-second gratitude note to your future self after each milestone",
+            "Post a visual snapshot of progress in the learning channel",
+        ]
+
+        escalation_paths = [
+            "Trigger a mentor or peer review when two consecutive check-ins flag confusion",
+            "Schedule a live pairing session if blockers persist beyond 48 hours",
+            "Switch modalities (e.g., from reading to interactive) when energy drops",
+        ]
+
+        return TutorCoachResponse(
+            onboarding_message=onboarding_message,
+            check_ins=check_ins,
+            celebration_rituals=celebration_rituals,
+            escalation_paths=escalation_paths,
+        )
+
+
 class TutorModeService:
-    """Generate an agentic tutoring plan using GPT-5 or an offline heuristic."""
+    """Manager agent that orchestrates individual tutor agents."""
 
     def __init__(
         self,
         *,
-        api_key: str | None,
-        base_url: str,
         model: str,
-        timeout: float = 30.0,
+        curriculum_agent: TutorCurriculumAgent,
+        assessment_agent: TutorAssessmentAgent,
+        practice_agent: TutorPracticeAgent,
+        coach_agent: TutorCoachAgent,
     ) -> None:
-        self.api_key = api_key
-        self.base_url = base_url.rstrip("/")
         self.model = model
-        self.timeout = timeout
+        self.curriculum_agent = curriculum_agent
+        self.assessment_agent = assessment_agent
+        self.practice_agent = practice_agent
+        self.coach_agent = coach_agent
 
-    async def generate_plan(self, payload: TutorModeRequest) -> TutorModeResponse:
-        """Return a structured tutor plan, attempting GPT-5 first."""
+    async def generate_plan(self, payload: TutorModeRequest) -> TutorManagerResponse:
+        """Dispatch all agents and compile the manager's response."""
 
-        if not self.api_key:
-            return self._offline_plan(payload)
+        curriculum = self.curriculum_agent.run(payload)
+        assessment = self.assessment_agent.run(payload)
+        practice = self.practice_agent.run(payload)
+        coach = self.coach_agent.run(payload)
 
-        try:
-            response_json = await self._call_openai(payload)
-            return self._from_openai(payload, response_json)
-        except Exception:
-            return self._offline_plan(payload)
-
-    async def _call_openai(self, payload: TutorModeRequest) -> dict[str, Any]:
-        """Invoke the OpenAI Responses API requesting a JSON plan."""
-
-        prompt = dedent(
-            f"""
-            You are BabyAGI operating in tutor mode and powered by {self.model}. Act as the GPT-5
-            manager orchestrating sub-agents inside a single chat conversation. Use the student
-            profile below to create a JSON-only tutoring plan that extracts the topic, diagnoses
-            level with a beginner flag, routes through staged concepts, and loops in quizzes when
-            a learner needs remediation.
-
-            Student profile:
-            - Topic: {payload.topic}
-            - Student level: {payload.student_level or 'unspecified'}
-            - Goals: {', '.join(payload.goals or ['not provided'])}
-            - Preferred modalities: {', '.join(payload.preferred_modalities or ['not provided'])}
-            - Additional context: {payload.additional_context or 'none'}
-
-            The JSON schema (tutor_plan) must contain:
-            {{
-              "model": string,
-              "learner_profile": string,
-              "objectives": string array,
-              "understanding": {{
-                "approach": string,
-                "diagnostic_questions": string array,
-                "signals_to_watch": string array,
-                "beginner_flag_logic": string,
-                "follow_up_questions": string array,
-                "max_follow_up_iterations": integer,
-                "escalation_strategy": string
-              }},
-              "concept_breakdown": array of {{
-                "concept": string,
-                "llm_reasoning": string,
-                "subtopics": string array,
-                "real_world_connections": string array,
-                "prerequisites": string array,
-                "mastery_checks": string array,
-                "remediation_plan": string,
-                "advancement_cue": string
-              }},
-              "teaching_modalities": array of {{
-                "modality": string,
-                "description": string,
-                "resources": string array
-              }},
-              "assessment": {{
-                "title": string,
-                "format": string,
-                "human_in_the_loop_notes": string,
-                "items": array of {{
-                  "prompt": string,
-                  "kind": string,
-                  "options": string array or null,
-                  "answer_key": string or null
-                }}
-              }},
-              "completion": {{
-                "mastery_indicators": string array,
-                "wrap_up_plan": string,
-                "follow_up_suggestions": string array
-              }},
-              "conversation_manager": {{
-                "agent_role": string,
-                "topic_extraction_prompt": string,
-                "level_assessment_summary": string,
-                "containment_strategy": string
-              }},
-              "learning_stages": array of {{
-                "name": string,
-                "focus": string,
-                "objectives": string array,
-                "prerequisites": string array,
-                "pass_criteria": string array,
-                "quiz": {{
-                  "prompt": string,
-                  "answer_key": string or null,
-                  "remediation": string
-                }},
-                "on_success": string,
-                "on_failure": string
-              }}
-            }}
-
-            Explicitly detail how the manager keeps the dialogue inside the chat, confirms the
-            topic, and asks up to three follow-up questions when the beginner flag is False before
-            escalating. Ensure each learning stage clearly states how to progress only after passing
-            a quiz or mastery check, and how to remediate otherwise.
-            """
-        ).strip()
-
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
-        body: dict[str, Any] = {
-            "model": self.model,
-            "input": prompt,
-            "text": {
-                "format": {
-                    "type": "json_object"
-                }
-            },
-        }
-
-        async with httpx.AsyncClient(timeout=self.timeout) as client:
-            response = await client.post(
-                f"{self.base_url}/responses", headers=headers, json=body
-            )
-        response.raise_for_status()
-
-        data = response.json()
-        # The Responses API returns JSON content in various spots; prefer direct JSON.
-        if isinstance(data, dict) and "output" in data:
-            for item in data.get("output", []):
-                if item.get("type") == "output_text":
-                    return httpx.Response(200, text=item.get("text", "{}"), request=response.request).json()
-        if isinstance(data, dict) and "output_text" in data:
-            return httpx.Response(200, text=data.get("output_text", "{}"), request=response.request).json()
-        if isinstance(data, dict) and "response" in data:
-            return data["response"]
-        return data
-
-    def _from_openai(
-        self, payload: TutorModeRequest, response_json: dict[str, Any]
-    ) -> TutorModeResponse:
-        """Convert OpenAI JSON into the API's typed response."""
-
-        # Defensive parsing: fall back to offline plan if required keys are missing.
-        required_keys = {
-            "learner_profile",
-            "objectives",
-            "understanding",
-            "concept_breakdown",
-            "teaching_modalities",
-            "assessment",
-            "completion",
-            "conversation_manager",
-            "learning_stages",
-        }
-        if not required_keys.issubset(response_json):
-            return self._offline_plan(payload)
-
-        understanding = TutorUnderstandingPlan(**response_json["understanding"])
-        concepts = [
-            TutorConceptBreakdown(**concept)
-            for concept in response_json.get("concept_breakdown", [])
-        ]
-        modalities = [
-            TutorTeachingModality(**modality)
-            for modality in response_json.get("teaching_modalities", [])
-        ]
-        assessment_payload = response_json.get("assessment", {})
-        items = [
-            TutorAssessmentItem(**item)
-            for item in assessment_payload.get("items", [])
-        ]
-        assessment = TutorAssessmentPlan(**assessment_payload, items=items)
-        completion = TutorCompletionPlan(**response_json.get("completion", {}))
-        conversation_manager = TutorConversationManager(
-            **response_json.get("conversation_manager", {})
-        )
-        stages = []
-        for stage_payload in response_json.get("learning_stages", []):
-            quiz_payload = stage_payload.get("quiz", {})
-            quiz = TutorStageQuiz(**quiz_payload)
-            stages.append(
-                TutorLearningStage(
-                    name=stage_payload.get("name", "Stage"),
-                    focus=stage_payload.get("focus", ""),
-                    objectives=stage_payload.get("objectives", []),
-                    prerequisites=stage_payload.get("prerequisites", []),
-                    pass_criteria=stage_payload.get("pass_criteria", []),
-                    quiz=quiz,
-                    on_success=stage_payload.get("on_success", ""),
-                    on_failure=stage_payload.get("on_failure", ""),
-                )
-            )
-
-        return TutorModeResponse(
-            model=response_json.get("model", self.model),
-            generated_at=datetime.now(timezone.utc),
-            topic=payload.topic,
-            learner_profile=response_json["learner_profile"],
-            objectives=response_json.get("objectives", []),
-            understanding=understanding,
-            concept_breakdown=concepts,
-            teaching_modalities=modalities,
+        manager_profile = self._build_manager_profile(
+            payload=payload,
+            curriculum=curriculum,
             assessment=assessment,
-            completion=completion,
-            conversation_manager=conversation_manager,
-            learning_stages=stages,
+            practice=practice,
+            coach=coach,
         )
 
-    def _offline_plan(self, payload: TutorModeRequest) -> TutorModeResponse:
-        """Provide a deterministic plan when GPT-5 cannot be reached."""
-
-        learner_profile = payload.student_level or "Curious learner"
-        objectives = payload.goals or [
-            f"Build foundational understanding of {payload.topic}",
-            "Practice applying the concept in context",
-        ]
-        understanding = TutorUnderstandingPlan(
-            approach="Start with a conversational diagnostic to gauge prior knowledge",
-            diagnostic_questions=[
-                f"How would you describe {payload.topic} in your own words?",
-                "Which parts feel confusing or intimidating right now?",
-            ],
-            signals_to_watch=[
-                "Confidence when answering why/how questions",
-                "Ability to connect the topic to prior knowledge",
-            ],
-            beginner_flag_logic="Mark beginner=True when the learner struggles to define foundational vocabulary or relies on guesses.",
-            follow_up_questions=[
-                f"Can you share an example of using {payload.topic}?",
-                "What related concepts have you studied before?",
-                "Where do you feel the biggest gap is right now?",
-            ],
-            max_follow_up_iterations=3,
-            escalation_strategy="After three probes, summarise what is known, state the provisional beginner flag, and explain the tailored path.",
-        )
-        concept_breakdown = [
-            TutorConceptBreakdown(
-                concept=payload.topic,
-                llm_reasoning="Decompose the topic into digestible layers, building from fundamentals to nuanced applications.",
-                subtopics=[
-                    f"Core principles of {payload.topic}",
-                    "Key vocabulary and definitions",
-                    "Common pitfalls and misconceptions",
-                ],
-                real_world_connections=[
-                    f"Everyday scenarios where {payload.topic} shows up",
-                    "Analogies drawn from the learner's interests",
-                ],
-                prerequisites=["Baseline terminology", "Related prior knowledge from diagnostic"],
-                mastery_checks=[
-                    "Learner can outline the main steps without prompting",
-                    "Learner correctly answers a why/how follow-up",
-                ],
-                remediation_plan="Deliver a targeted quiz, revisit prerequisite vocabulary, and co-create a new example before retrying.",
-                advancement_cue="Celebrate with positive feedback and segue into the next subtopic via an applied challenge.",
-            )
-        ]
-        modalities = [
-            TutorTeachingModality(
-                modality="visual",
-                description="Use diagrams or flowcharts to map the relationships between subtopics.",
-                resources=["Whiteboard sketches", "Infographic summarising the big picture"],
-            ),
-            TutorTeachingModality(
-                modality="interactive",
-                description="Guide the learner through a short BabyAGI-style task list they complete with you.",
-                resources=["Collaborative document", "Step-by-step practice prompts"],
-            ),
-            TutorTeachingModality(
-                modality="verbal",
-                description="Offer a narrative explanation that stitches the ideas together with stories.",
-                resources=["Mini lecture outline", "Real-time Q&A"],
-            ),
-        ]
-        assessment_items = [
-            TutorAssessmentItem(
-                prompt=f"Explain {payload.topic} to a friend using a real-world analogy.",
-                kind="reflection",
-            ),
-            TutorAssessmentItem(
-                prompt=f"Apply {payload.topic} to solve a quick scenario provided by the mentor.",
-                kind="practical",
-                answer_key="Look for a structured approach and correct reasoning steps.",
-            ),
-        ]
-        assessment = TutorAssessmentPlan(
-            title=f"{payload.topic} comprehension check",
-            format="Conversational debrief with quick formative quiz",
-            human_in_the_loop_notes="Mentor reviews answers, probes for depth, and adapts follow-up tasks",
-            items=assessment_items,
-        )
-        completion = TutorCompletionPlan(
-            mastery_indicators=[
-                "Learner explains the concept clearly and accurately",
-                "Learner demonstrates transfer through a novel example",
-                "Learner identifies next steps or questions without prompting",
-            ],
-            wrap_up_plan="Summarise key insights together and document agreed action items in the shared workspace.",
-            follow_up_suggestions=[
-                "Schedule a follow-up micro-assessment in 48 hours",
-                "Provide curated resources aligned with preferred modalities",
-            ],
-        )
-        conversation_manager = TutorConversationManager(
-            agent_role="You are the GPT-5 manager coordinating tutor sub-agents inside this chat.",
-            topic_extraction_prompt=(
-                f"Let's double-check: are we focusing on {payload.topic}? If not, ask the learner to clarify the exact topic."
-            ),
-            level_assessment_summary=(
-                "Set beginner_flag based on diagnostic signals. If False, ask follow-up questions sequentially (up to three) before committing."
-            ),
-            containment_strategy="Keep every clarification, assessment, and plan update inside this chat thread and narrate any agent hand-offs explicitly.",
-        )
-        learning_stages = [
-            TutorLearningStage(
-                name="Stage 1",
-                focus="Foundational vocabulary and framing",
-                objectives=[
-                    f"Define the essential terms associated with {payload.topic}",
-                    "Relate the concept to the learner's prior knowledge",
-                ],
-                prerequisites=["Beginner flag evaluated", "Diagnostic summary shared"],
-                pass_criteria=[
-                    "Learner restates the topic accurately",
-                    "Learner identifies at least one real-world application",
-                ],
-                quiz=TutorStageQuiz(
-                    prompt=f"Provide a simple scenario and ask the learner to identify how {payload.topic} applies.",
-                    answer_key="Look for alignment with the key vocabulary and accurate mapping to the scenario.",
-                    remediation="If incorrect, revisit the vocabulary with a new example and retry the quiz.",
-                ),
-                on_success="Acknowledge mastery and transition to applied practice.",
-                on_failure="Loop back to the remediation plan, then re-issue the quiz before advancing.",
-            ),
-            TutorLearningStage(
-                name="Stage 2",
-                focus="Applied practice",
-                objectives=[
-                    "Guide the learner through a multi-step problem",
-                    "Highlight decision points where misconceptions appear",
-                ],
-                prerequisites=["Stage 1 passed"],
-                pass_criteria=[
-                    "Learner solves the practice scenario with minimal scaffolding",
-                    "Learner explains the reasoning behind each step",
-                ],
-                quiz=TutorStageQuiz(
-                    prompt="Present a novel practice task and request a think-aloud solution.",
-                    answer_key="Solution should include the major steps and rational justification.",
-                    remediation="Break the task into micro-steps, model the first one, then have the learner continue.",
-                ),
-                on_success="Offer a celebratory recap and outline how the next stage will extend the concept.",
-                on_failure="Return to the misconception, model a corrected approach, and retry the quiz with a similar prompt.",
-            ),
-            TutorLearningStage(
-                name="Stage 3",
-                focus="Extension and transfer",
-                objectives=[
-                    "Challenge the learner with an open-ended question",
-                    "Encourage them to plan future practice or projects",
-                ],
-                prerequisites=["Stage 2 passed"],
-                pass_criteria=[
-                    "Learner proposes a creative application or extension",
-                    "Learner self-identifies next steps or lingering questions",
-                ],
-                quiz=TutorStageQuiz(
-                    prompt="Ask the learner to design a mini-quiz for someone else on this topic.",
-                    answer_key="Should include accurate questions and expected answers that reflect deep understanding.",
-                    remediation="Collaboratively draft one quiz question together, then let the learner complete the set.",
-                ),
-                on_success="Wrap up with the completion plan and encourage autonomy.",
-                on_failure="Diagnose gaps, revisit relevant prior stages, and co-create the quiz before another attempt.",
-            ),
-        ]
-
-        return TutorModeResponse(
+        return TutorManagerResponse(
             model=self.model,
             generated_at=datetime.now(timezone.utc),
             topic=payload.topic,
-            learner_profile=learner_profile,
-            objectives=objectives,
-            understanding=understanding,
-            concept_breakdown=concept_breakdown,
-            teaching_modalities=modalities,
-            assessment=assessment,
-            completion=completion,
-            conversation_manager=conversation_manager,
-            learning_stages=learning_stages,
+            learner_profile=_profile_summary(payload),
+            manager=manager_profile,
+            agents=[
+                TutorManagerAgentReport(
+                    id="curriculum",
+                    name="Curriculum Strategist",
+                    route="/api/v1/tutor/curriculum",
+                    status="completed",
+                    summary=curriculum.summary,
+                    payload=curriculum.model_dump(),
+                ),
+                TutorManagerAgentReport(
+                    id="assessment",
+                    name="Assessment Architect",
+                    route="/api/v1/tutor/assessment",
+                    status="completed",
+                    summary=assessment.description,
+                    payload=assessment.model_dump(),
+                ),
+                TutorManagerAgentReport(
+                    id="practice",
+                    name="Practice Producer",
+                    route="/api/v1/tutor/practice",
+                    status="completed",
+                    summary=f"Outlined {len(practice.sprints)} sprints with accountability rituals",
+                    payload=practice.model_dump(),
+                ),
+                TutorManagerAgentReport(
+                    id="coach",
+                    name="Progress Coach",
+                    route="/api/v1/tutor/coach",
+                    status="completed",
+                    summary="Sequenced coaching touch-points and escalation paths",
+                    payload=coach.model_dump(),
+                ),
+            ],
+        )
+
+    def _build_manager_profile(
+        self,
+        *,
+        payload: TutorModeRequest,
+        curriculum: TutorCurriculumResponse,
+        assessment: TutorAssessmentResponse,
+        practice: TutorPracticeResponse,
+        coach: TutorCoachResponse,
+    ) -> TutorManagerProfile:
+        """Craft the manager agent's rationale and directives."""
+
+        goals = _ensure_list(payload.goals) or [f"Progress in {payload.topic}"]
+        priorities = [
+            f"Deliver curriculum that moves the learner toward: {goals[0]}",
+            "Keep practice loops lightweight but visible to mentors",
+            "Surface coaching signals early so we can adjust the plan",
+        ]
+
+        rationale = (
+            "Curriculum, assessment, practice, and coaching operate as a loop. "
+            "The manager routes requests to specialists to keep focus tight while sharing context."
+        )
+
+        next_steps = [
+            f"Review the curriculum summary: {curriculum.summary}",
+            f"Send the learner the quiz '{assessment.title}' for a quick pulse",
+            "Schedule the first accountability check-in from the practice plan",
+            "Adopt the celebration ritual that resonates most with the learner",
+        ]
+
+        mission = (
+            f"Coordinate GPT-5 agents so the learner experiences a cohesive {payload.topic} journey."
+        )
+
+        return TutorManagerProfile(
+            name="GPT-5 Tutor Manager",
+            mission=mission,
+            rationale=rationale,
+            priorities=priorities,
+            next_steps=next_steps,
         )

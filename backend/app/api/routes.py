@@ -10,19 +10,23 @@ from fastapi.responses import StreamingResponse
 from pydantic import HttpUrl
 
 from app.api.dependencies import (
+    get_assessment_agent,
     get_auth_client,
     get_audio_transcriber,
     # get_audio_storage,  # Commented out AWS S3 for now
     get_context_storage,
+    get_curriculum_agent,
     get_emotion_analyzer,
     get_generative_ui_service,
     get_journal_coach,
     get_note_annotator,
     get_payment_service,
+    get_practice_agent,
     get_realtime_client,
     get_research_service,
     get_settings,
     get_tutor_service,
+    get_coach_agent,
     get_vision_analyzer,
 )
 from app.core.config import Settings
@@ -46,7 +50,14 @@ from app.schemas.realtime import (
 from app.schemas.journal import JournalEntryRequest, JournalEntryResponse
 from app.schemas.research import ResearchPaperSummary, ResearchSearchRequest
 from app.schemas.note import NoteCreateRequest, NoteCreateResponse
-from app.schemas.tutor import TutorModeRequest, TutorModeResponse
+from app.schemas.tutor import (
+    TutorAssessmentResponse,
+    TutorCoachResponse,
+    TutorCurriculumResponse,
+    TutorManagerResponse,
+    TutorModeRequest,
+    TutorPracticeResponse,
+)
 from app.services.auth import Auth0Client, Auth0ClientError
 from app.services.emotion import EmotionAnalyzer
 from app.services.generative_ui import (
@@ -61,7 +72,13 @@ from app.services.payment import StripePaymentError, StripePaymentService
 from app.services.realtime import RealtimeSessionClient, RealtimeSessionError
 from app.services.research import ResearchDiscoveryService
 # from app.services.storage import S3AudioStorage, StorageServiceError  # Commented out AWS S3 for now
-from app.services.tutor import TutorModeService
+from app.services.tutor import (
+    TutorAssessmentAgent,
+    TutorCoachAgent,
+    TutorCurriculumAgent,
+    TutorModeService,
+    TutorPracticeAgent,
+)
 from app.services.vision import (
     VisionAnalysisError,
     VisionAnalyzer,
@@ -659,14 +676,70 @@ async def create_checkout_session(
     return PaymentCheckoutResponse(session_id=session.session_id, checkout_url=session.url)
 
 
-@router.post("/tutor/mode", response_model=TutorModeResponse, tags=["tutor"])
-async def create_tutor_mode_plan(
+@router.post("/tutor/mode", response_model=TutorManagerResponse, tags=["tutor"])
+async def orchestrate_tutor_mode(
     payload: TutorModeRequest,
     tutor_service: TutorModeService = Depends(get_tutor_service),
-) -> TutorModeResponse:
-    """Create a BabyAGI-inspired tutoring plan powered by GPT-5."""
+) -> TutorManagerResponse:
+    """Ask the manager agent to dispatch specialist tutor agents and return their results."""
 
     return await tutor_service.generate_plan(payload)
+
+
+@router.post(
+    "/tutor/curriculum",
+    response_model=TutorCurriculumResponse,
+    tags=["tutor"],
+)
+async def generate_curriculum_plan(
+    payload: TutorModeRequest,
+    agent: TutorCurriculumAgent = Depends(get_curriculum_agent),
+) -> TutorCurriculumResponse:
+    """Return the curriculum agent's staged learning journey."""
+
+    return agent.run(payload)
+
+
+@router.post(
+    "/tutor/assessment",
+    response_model=TutorAssessmentResponse,
+    tags=["tutor"],
+)
+async def generate_assessment(
+    payload: TutorModeRequest,
+    agent: TutorAssessmentAgent = Depends(get_assessment_agent),
+) -> TutorAssessmentResponse:
+    """Return a formative quiz with answer key from the assessment agent."""
+
+    return agent.run(payload)
+
+
+@router.post(
+    "/tutor/practice",
+    response_model=TutorPracticeResponse,
+    tags=["tutor"],
+)
+async def generate_practice_plan(
+    payload: TutorModeRequest,
+    agent: TutorPracticeAgent = Depends(get_practice_agent),
+) -> TutorPracticeResponse:
+    """Return hands-on practice sprints from the practice agent."""
+
+    return agent.run(payload)
+
+
+@router.post(
+    "/tutor/coach",
+    response_model=TutorCoachResponse,
+    tags=["tutor"],
+)
+async def generate_coaching_playbook(
+    payload: TutorModeRequest,
+    agent: TutorCoachAgent = Depends(get_coach_agent),
+) -> TutorCoachResponse:
+    """Return progress coaching prompts and escalation paths."""
+
+    return agent.run(payload)
 
 
 def _encode_event(payload: dict[str, object]) -> str:

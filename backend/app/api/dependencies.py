@@ -13,7 +13,7 @@ from app.services.payment import StripePaymentService
 from app.services.realtime import RealtimeSessionClient
 from app.services.research import ResearchDiscoveryService
 from app.services.storage import S3AudioStorage, StorageServiceError
-from app.services.tutor import TutorModeService
+from app.services.tutor import TutorAgentService
 from app.services.context_storage import get_context_storage
 from app.services.vision import VisionAnalyzer
 
@@ -186,18 +186,14 @@ def get_research_service() -> ResearchDiscoveryService:
 
 
 @lru_cache
-def _get_tutor_service() -> TutorModeService:
+def _get_tutor_service() -> TutorAgentService:
     """Return a singleton tutor mode service configured from settings."""
 
-    settings = _get_settings()
-    return TutorModeService(
-        api_key=settings.openai_api_key,
-        base_url=settings.openai_api_base_url,
-        model="gpt-5",
-    )
+    _get_settings()  # Ensure configuration is loaded before instantiating the service.
+    return TutorAgentService(model="gpt-5")
 
 
-def get_tutor_service() -> TutorModeService:
+def get_tutor_service() -> TutorAgentService:
     """FastAPI dependency wrapper around the tutor service singleton."""
 
     return _get_tutor_service()

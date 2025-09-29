@@ -1,8 +1,5 @@
-"""Pydantic models for the Tutor Mode feature."""
+"""Pydantic schemas for tutor mode manager and specialist agents."""
 
-from __future__ import annotations
-
-from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -30,131 +27,92 @@ class TutorModeRequest(BaseModel):
     )
 
 
-class TutorUnderstandingPlan(BaseModel):
-    """Step 0 – capture how the tutor will gauge the learner's level."""
-
-    approach: str
-    diagnostic_questions: list[str]
-    signals_to_watch: list[str]
-    beginner_flag_logic: str = Field(
-        default="Classify the learner as a beginner when answers show limited prior knowledge.",
-        description="How the tutor converts qualitative signals into the beginner boolean flag",
-    )
-    follow_up_questions: list[str] = Field(
-        default_factory=list,
-        description="Additional probes asked when the learner is not a beginner",
-    )
-    max_follow_up_iterations: int = Field(
-        default=3,
-        description="Maximum number of iterations before moving on",
-    )
-    escalation_strategy: str = Field(
-        default="Summarise what you learned and explain how you will adapt the plan before continuing.",
-        description="What the tutor does if understanding remains unclear after follow ups",
-    )
+AgentId = Literal["manager", "curriculum", "workshop", "assessment"]
 
 
-class TutorConceptBreakdown(BaseModel):
-    """Step 1 – structured concepts and reasoning."""
+class TutorAgentDescriptor(BaseModel):
+    """Metadata describing a specialist tutor agent the manager can delegate to."""
 
-    concept: str
-    llm_reasoning: str
-    subtopics: list[str]
-    real_world_connections: list[str]
-    prerequisites: list[str] = Field(
-        default_factory=list,
-        description="Concepts that must be mastered before this one",
-    )
-    mastery_checks: list[str] = Field(
-        default_factory=list,
-        description="Observable indicators that the learner is ready to advance",
-    )
-    remediation_plan: str = Field(
-        default="Offer a quick formative quiz and revisit the prerequisite concept with a new example.",
-        description="Action taken when mastery checks are not met",
-    )
-    advancement_cue: str = Field(
-        default="Acknowledge success and transition to the next concept with an applied challenge.",
-        description="How to celebrate/transition after a pass",
-    )
-
-
-class TutorTeachingModality(BaseModel):
-    """Step 2 – multi-modal explanation strategy."""
-
-    modality: Literal["visual", "verbal", "interactive", "experiential", "reading", "other"]
+    id: AgentId
+    name: str
+    route: str = Field(..., description="API route used to activate the agent")
     description: str
-    resources: list[str]
+    deliverables: list[str] = Field(
+        default_factory=list,
+        description="Concrete outputs the agent promises to return",
+    )
 
 
-class TutorAssessmentItem(BaseModel):
-    """Single assessment artifact for Step 3."""
+class TutorManagerResponse(BaseModel):
+    """Manager agent response introducing the full tutoring collective."""
 
-    prompt: str
-    kind: Literal["multiple_choice", "short_answer", "reflection", "practical"]
-    options: list[str] | None = None
-    answer_key: str | None = None
+    topic: str
+    student_level: str | None
+    summary: str
+    kickoff_script: str
+    agenda: list[str]
+    agents: list[TutorAgentDescriptor]
 
 
-class TutorAssessmentPlan(BaseModel):
-    """Step 3 – checks for understanding with human-in-the-loop guidance."""
+class TutorCurriculumSection(BaseModel):
+    """Single unit in a curriculum blueprint."""
 
     title: str
-    format: str
-    human_in_the_loop_notes: str
-    items: list[TutorAssessmentItem]
+    duration: str
+    focus: str
+    learning_goals: list[str]
+    activities: list[str]
+    resources: list[str]
+    assessment: str
 
 
-class TutorConversationManager(BaseModel):
-    """High-level directives for the GPT-5 manager orchestrating the session."""
+class TutorCurriculumResponse(BaseModel):
+    """Curriculum strategist output describing the macro learning journey."""
 
-    agent_role: str
-    topic_extraction_prompt: str
-    level_assessment_summary: str
-    containment_strategy: str
-
-
-class TutorStageQuiz(BaseModel):
-    """Quiz blueprint attached to a learning stage."""
-
-    prompt: str
-    answer_key: str | None = None
-    remediation: str
+    topic: str
+    level: str
+    overview: str
+    pacing_guide: str
+    sections: list[TutorCurriculumSection]
 
 
-class TutorLearningStage(BaseModel):
-    """Learning stage that enforces pass/fail progression rules."""
+class TutorWorkshopSegment(BaseModel):
+    """Segment within an applied workshop or coaching session."""
 
     name: str
-    focus: str
-    objectives: list[str]
-    prerequisites: list[str]
-    pass_criteria: list[str]
-    quiz: TutorStageQuiz
-    on_success: str
-    on_failure: str
+    duration: str
+    objective: str
+    flow: list[str]
+    materials: list[str]
+    reflection_prompts: list[str]
 
 
-class TutorCompletionPlan(BaseModel):
-    """Step 4 – how the agent knows instruction is complete."""
+class TutorWorkshopResponse(BaseModel):
+    """Hands-on session plan produced by the workshop designer."""
 
-    mastery_indicators: list[str]
-    wrap_up_plan: str
-    follow_up_suggestions: list[str]
-
-
-class TutorModeResponse(BaseModel):
-    """Comprehensive tutor mode plan returned to clients."""
-
-    model: str = Field(description="Model powering the plan")
-    generated_at: datetime
     topic: str
-    learner_profile: str
-    objectives: list[str]
-    understanding: TutorUnderstandingPlan
-    concept_breakdown: list[TutorConceptBreakdown]
-    teaching_modalities: list[TutorTeachingModality]
-    assessment: TutorAssessmentPlan
-    completion: TutorCompletionPlan
-    conversation_manager: TutorConversationManager
-    learning_stages: list[TutorLearningStage]
+    scenario: str
+    description: str
+    segments: list[TutorWorkshopSegment]
+    exit_ticket: list[str]
+
+
+class TutorAssessmentQuestion(BaseModel):
+    """Assessment item with an answer key for the assessment architect."""
+
+    id: str
+    type: Literal["multiple_choice", "short_answer"]
+    prompt: str
+    options: list[str] | None = None
+    answer: str
+    rationale: str
+
+
+class TutorAssessmentResponse(BaseModel):
+    """Quiz and scoring guidance for validating mastery."""
+
+    topic: str
+    difficulty: str
+    instructions: str
+    success_criteria: list[str]
+    questions: list[TutorAssessmentQuestion]

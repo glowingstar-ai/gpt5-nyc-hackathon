@@ -264,6 +264,7 @@ export default function RealtimeAssistantPage(): JSX.Element {
   const surfaceRef = useRef<HTMLDivElement | null>(null);
   const timeoutRef = useRef<number>();
   const shareInFlightRef = useRef(false);
+  const splitRef = useRef<HTMLDivElement | null>(null);
 
   const [shareStatus, setShareStatus] = useState<ShareStatus>("idle");
   const [shareMessage, setShareMessage] = useState<string | null>(null);
@@ -272,17 +273,59 @@ export default function RealtimeAssistantPage(): JSX.Element {
     null
   );
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<
-    "code" | "paper"
+    "code" | "paper" | "youtube"
   >("code");
   const [pythonSnippet, setPythonSnippet] = useState<string>(
     DEFAULT_PYTHON_SNIPPET
   );
+  const [leftWidthPct, setLeftWidthPct] = useState<number>(45);
+  const isResizingRef = useRef(false);
 
   useEffect(() => {
     return () => {
       if (timeoutRef.current) {
         window.clearTimeout(timeoutRef.current);
       }
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleMove = (event: MouseEvent | TouchEvent) => {
+      if (!isResizingRef.current) return;
+      const container = splitRef.current;
+      if (!container) return;
+      const rect = container.getBoundingClientRect();
+      let clientX: number;
+      if (event instanceof TouchEvent) {
+        clientX = event.touches[0]?.clientX ?? 0;
+      } else {
+        clientX = (event as MouseEvent).clientX;
+      }
+      const x = Math.min(Math.max(clientX - rect.left, 0), rect.width);
+      const pct = (x / rect.width) * 100;
+      const clamped = Math.min(75, Math.max(25, pct));
+      setLeftWidthPct(clamped);
+    };
+
+    const stop = () => {
+      isResizingRef.current = false;
+      document.body.style.userSelect = "";
+      document.body.style.cursor = "";
+    };
+
+    window.addEventListener("mousemove", handleMove);
+    window.addEventListener("touchmove", handleMove, { passive: false });
+    window.addEventListener("mouseup", stop);
+    window.addEventListener("touchend", stop);
+
+    return () => {
+      window.removeEventListener("mousemove", handleMove);
+      window.removeEventListener(
+        "touchmove",
+        handleMove as unknown as EventListener
+      );
+      window.removeEventListener("mouseup", stop);
+      window.removeEventListener("touchend", stop);
     };
   }, []);
 
@@ -312,13 +355,49 @@ export default function RealtimeAssistantPage(): JSX.Element {
       setShareMessage("Capturing and analyzing your current workspace…");
     }
 
+    // Swap problematic embeds (iframes, PDFs) with capture-safe posters
+    const restoreEmbedsForCapture = () => {
+      const wrappers = target.querySelectorAll<HTMLElement>(
+        "[data-youtube-id], [data-pdf-poster]"
+      );
+      wrappers.forEach((wrapper) => {
+        const poster = wrapper.querySelector<HTMLElement>(
+          "[data-capture-poster]"
+        );
+        const embed = wrapper.querySelector<HTMLElement>(
+          "[data-capture-embed]"
+        );
+        if (poster) poster.classList.add("hidden");
+        if (embed) embed.classList.remove("invisible");
+      });
+    };
+
+    const prepareEmbedsForCapture = () => {
+      const wrappers = target.querySelectorAll<HTMLElement>(
+        "[data-youtube-id], [data-pdf-poster]"
+      );
+      wrappers.forEach((wrapper) => {
+        const poster = wrapper.querySelector<HTMLElement>(
+          "[data-capture-poster]"
+        );
+        const embed = wrapper.querySelector<HTMLElement>(
+          "[data-capture-embed]"
+        );
+        if (poster) poster.classList.remove("hidden");
+        if (embed) embed.classList.add("invisible");
+      });
+      return restoreEmbedsForCapture;
+    };
+
     try {
+      const restore = prepareEmbedsForCapture();
       const canvas = await html2canvas(target, {
         backgroundColor: resolveBackgroundColor(),
         scale: Math.min(window.devicePixelRatio || 1, 2),
         useCORS: true,
         logging: false,
       });
+      restore();
 
       const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
       const base64 = dataUrl.split(",")[1];
@@ -410,7 +489,7 @@ export default function RealtimeAssistantPage(): JSX.Element {
             title="Realtime Assistant"
             current="Realtime Assistant"
             subtitle="Speak with GPT-5 while it sees what you see"
-            maxWidthClassName="max-w-6xl"
+            maxWidthClassName="max-w-none"
             rightSlot={
               <Button
                 asChild
@@ -423,11 +502,17 @@ export default function RealtimeAssistantPage(): JSX.Element {
         </div>
         <main className="relative z-10">
           <div
-            className="relative mx-auto flex min-h-screen w-full max-w-6xl flex-col px-6 pb-20 pt-10 sm:px-10"
+            className="relative mx-auto flex min-h-screen w-full max-w-none flex-col px-6 pb-20 pt-10 sm:px-10"
             ref={surfaceRef}
           >
-            <section className="relative z-10 mt-10 grid gap-6 lg:grid-cols-[minmax(0,0.95fr)_minmax(0,1.15fr)]">
-              <div className="flex flex-col justify-between gap-6 rounded-2xl border border-slate-800/60 bg-slate-900/70 p-6 shadow-[0_25px_50px_-20px_rgba(15,118,110,0.45)] backdrop-blur">
+            <section
+              ref={splitRef}
+              className="relative z-10 mt-10 grid gap-6"
+              style={{
+                gridTemplateColumns: `minmax(280px, ${leftWidthPct}%) 14px minmax(320px, ${100 - leftWidthPct}%)`,
+              }}
+            >
+              <div className="flex flex-col gap-0 rounded-2xl border border-slate-800/60 bg-slate-900/70 p-6 shadow-[0_25px_50px_-20px_rgba(15,118,110,0.45)] backdrop-blur">
                 <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.32em] text-emerald-300/80">
@@ -456,6 +541,7 @@ export default function RealtimeAssistantPage(): JSX.Element {
                     {[
                       { id: "code" as const, label: "Python editor" },
                       { id: "paper" as const, label: "Research paper" },
+                      { id: "youtube" as const, label: "YouTube" },
                     ].map((tab) => {
                       const isActive = activeWorkspaceTab === tab.id;
                       return (
@@ -475,7 +561,7 @@ export default function RealtimeAssistantPage(): JSX.Element {
                     })}
                   </div>
 
-                  <div className="mt-5">
+                  <div className="mt-2">
                     {activeWorkspaceTab === "code" ? (
                       <div className="space-y-4 rounded-xl border border-slate-800/70 bg-slate-950/70 p-5">
                         <div className="flex flex-wrap items-center justify-between gap-3">
@@ -501,30 +587,117 @@ export default function RealtimeAssistantPage(): JSX.Element {
                           tab for rapid iteration.
                         </Text>
                       </div>
+                    ) : activeWorkspaceTab === "paper" ? (
+                      <div className="overflow-hidden rounded-xl border border-slate-800/70 bg-slate-950/70">
+                        <div
+                          className="relative h-[26rem] w-full"
+                          data-pdf-poster
+                        >
+                          <div
+                            data-capture-poster
+                            className="pointer-events-none absolute inset-0 hidden select-none bg-slate-950/70"
+                          >
+                            <div className="flex h-full w-full items-center justify-center">
+                              <span className="rounded-md border border-slate-700 bg-slate-900/70 px-3 py-1 text-xs text-slate-300">
+                                PDF preview (captured)
+                              </span>
+                            </div>
+                          </div>
+                          <object
+                            data="https://arxiv.org/pdf/1706.03762.pdf#toolbar=0"
+                            type="application/pdf"
+                            className="absolute left-0 top-0 h-full w-full"
+                            data-capture-embed
+                          >
+                            <div className="p-6 text-sm text-slate-300">
+                              Your browser cannot display PDFs.
+                              <a
+                                href="https://arxiv.org/pdf/1706.03762.pdf"
+                                className="ml-2 text-emerald-300 underline"
+                              >
+                                Download the paper
+                              </a>
+                              .
+                            </div>
+                          </object>
+                        </div>
+                      </div>
                     ) : (
                       <div className="overflow-hidden rounded-xl border border-slate-800/70 bg-slate-950/70">
-                        <object
-                          data="https://arxiv.org/pdf/1706.03762.pdf#toolbar=0"
-                          type="application/pdf"
-                          className="h-[26rem] w-full"
+                        <div
+                          className="relative h-[26rem] w-full"
+                          data-youtube-id="n1OaYHnzCuE"
                         >
-                          <div className="p-6 text-sm text-slate-300">
-                            Your browser cannot display PDFs.
-                            <a
-                              href="https://arxiv.org/pdf/1706.03762.pdf"
-                              className="ml-2 text-emerald-300 underline"
-                            >
-                              Download the paper
-                            </a>
-                            .
+                          <div
+                            data-capture-poster
+                            className="pointer-events-none absolute inset-0 hidden select-none"
+                            style={{
+                              backgroundImage:
+                                "url(https://img.youtube.com/vi/n1OaYHnzCuE/hqdefault.jpg)",
+                              backgroundSize: "cover",
+                              backgroundPosition: "center",
+                            }}
+                          >
+                            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/80 to-transparent p-3 text-xs text-slate-200">
+                              YouTube preview (captured)
+                            </div>
                           </div>
-                        </object>
+                          <iframe
+                            className="absolute left-0 top-0 h-full w-full"
+                            src="https://www.youtube.com/embed/n1OaYHnzCuE"
+                            title="YouTube video player"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                            allowFullScreen
+                            data-capture-embed
+                          />
+                        </div>
                       </div>
                     )}
                   </div>
                 </div>
               </div>
-
+              <div
+                role="separator"
+                aria-orientation="vertical"
+                aria-label="Resize panels"
+                onMouseDown={() => {
+                  isResizingRef.current = true;
+                  document.body.style.userSelect = "none";
+                  document.body.style.cursor = "col-resize";
+                }}
+                onTouchStart={() => {
+                  isResizingRef.current = true;
+                  document.body.style.userSelect = "none";
+                  document.body.style.cursor = "col-resize";
+                }}
+                className="relative mx-auto h-full w-[10px] cursor-col-resize rounded-full bg-slate-800/70 transition-colors hover:bg-emerald-400/70"
+              >
+                <span className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-md bg-slate-900/80 p-0.5 text-slate-400 shadow-sm">
+                  <svg
+                    width="10"
+                    height="10"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="block"
+                  >
+                    <path
+                      d="M10 6L6 12L10 18"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                    <path
+                      d="M14 6L18 12L14 18"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                </span>
+              </div>
               <div className="space-y-6">
                 <RealtimeConversationPanel
                   onShareVisionFrame={() => shareUiContext({ silent: true })}

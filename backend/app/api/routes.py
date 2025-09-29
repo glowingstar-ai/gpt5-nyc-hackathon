@@ -46,7 +46,14 @@ from app.schemas.realtime import (
 from app.schemas.journal import JournalEntryRequest, JournalEntryResponse
 from app.schemas.research import ResearchPaperSummary, ResearchSearchRequest
 from app.schemas.note import NoteCreateRequest, NoteCreateResponse
-from app.schemas.tutor import TutorModeRequest, TutorModeResponse
+from app.schemas.tutor import (
+    TutorAssessmentAgentResponse,
+    TutorCoachAgentResponse,
+    TutorCurriculumAgentResponse,
+    TutorManagerAgentResponse,
+    TutorModalitiesAgentResponse,
+    TutorModeRequest,
+)
 from app.services.auth import Auth0Client, Auth0ClientError
 from app.services.emotion import EmotionAnalyzer
 from app.services.generative_ui import (
@@ -659,14 +666,64 @@ async def create_checkout_session(
     return PaymentCheckoutResponse(session_id=session.session_id, checkout_url=session.url)
 
 
-@router.post("/tutor/mode", response_model=TutorModeResponse, tags=["tutor"])
+@router.post("/tutor/manager", response_model=TutorManagerAgentResponse, tags=["tutor"])
+async def run_tutor_manager(
+    payload: TutorModeRequest,
+    tutor_service: TutorModeService = Depends(get_tutor_service),
+) -> TutorManagerAgentResponse:
+    """Execute the manager agent that coordinates tutor sub-agents."""
+
+    return await tutor_service.generate_manager_agent(payload)
+
+
+@router.post("/tutor/curriculum", response_model=TutorCurriculumAgentResponse, tags=["tutor"])
+async def run_tutor_curriculum(
+    payload: TutorModeRequest,
+    tutor_service: TutorModeService = Depends(get_tutor_service),
+) -> TutorCurriculumAgentResponse:
+    """Execute the curriculum strategist agent."""
+
+    return await tutor_service.generate_curriculum_agent(payload)
+
+
+@router.post("/tutor/modalities", response_model=TutorModalitiesAgentResponse, tags=["tutor"])
+async def run_tutor_modalities(
+    payload: TutorModeRequest,
+    tutor_service: TutorModeService = Depends(get_tutor_service),
+) -> TutorModalitiesAgentResponse:
+    """Execute the modality researcher agent."""
+
+    return await tutor_service.generate_modalities_agent(payload)
+
+
+@router.post("/tutor/assessment", response_model=TutorAssessmentAgentResponse, tags=["tutor"])
+async def run_tutor_assessment(
+    payload: TutorModeRequest,
+    tutor_service: TutorModeService = Depends(get_tutor_service),
+) -> TutorAssessmentAgentResponse:
+    """Execute the assessment architect agent."""
+
+    return await tutor_service.generate_assessment_agent(payload)
+
+
+@router.post("/tutor/coach", response_model=TutorCoachAgentResponse, tags=["tutor"])
+async def run_tutor_coach(
+    payload: TutorModeRequest,
+    tutor_service: TutorModeService = Depends(get_tutor_service),
+) -> TutorCoachAgentResponse:
+    """Execute the progress coach agent."""
+
+    return await tutor_service.generate_coach_agent(payload)
+
+
+@router.post("/tutor/mode", response_model=TutorManagerAgentResponse, tags=["tutor"])
 async def create_tutor_mode_plan(
     payload: TutorModeRequest,
     tutor_service: TutorModeService = Depends(get_tutor_service),
-) -> TutorModeResponse:
-    """Create a BabyAGI-inspired tutoring plan powered by GPT-5."""
+) -> TutorManagerAgentResponse:
+    """Backwards-compatible alias for the tutor manager agent."""
 
-    return await tutor_service.generate_plan(payload)
+    return await tutor_service.generate_manager_agent(payload)
 
 
 def _encode_event(payload: dict[str, object]) -> str:

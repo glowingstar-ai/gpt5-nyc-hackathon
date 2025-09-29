@@ -158,3 +158,71 @@ class TutorModeResponse(BaseModel):
     completion: TutorCompletionPlan
     conversation_manager: TutorConversationManager
     learning_stages: list[TutorLearningStage]
+
+
+class TutorAgentHook(BaseModel):
+    """Descriptor for a specialised tutor agent API."""
+
+    id: str = Field(description="Stable identifier used by the frontend")
+    name: str = Field(description="Human friendly agent name")
+    description: str = Field(description="What this agent is responsible for")
+    endpoint: str = Field(description="Relative API path to call the agent")
+
+
+class TutorManagerResponse(BaseModel):
+    """Manager agent response describing available hooks."""
+
+    model: str
+    generated_at: datetime
+    topic: str
+    learner_profile: str
+    objectives: list[str]
+    conversation_manager: TutorConversationManager
+    agent_hooks: list[TutorAgentHook]
+
+
+class TutorCurriculumResponse(BaseModel):
+    """Curriculum agent response with stages and concept breakdown."""
+
+    model: str
+    generated_at: datetime
+    topic: str
+    concept_breakdown: list[TutorConceptBreakdown]
+    learning_stages: list[TutorLearningStage]
+
+
+class TutorModalitiesResponse(BaseModel):
+    """Modalities agent response with recommended teaching approaches."""
+
+    model: str
+    generated_at: datetime
+    topic: str
+    objectives: list[str]
+    teaching_modalities: list[TutorTeachingModality]
+
+
+class TutorStageQuizSummary(BaseModel):
+    """Summary of a stage-level quiz for quick rendering."""
+
+    stage: str
+    quiz: TutorStageQuiz
+
+
+class TutorAssessmentResponse(BaseModel):
+    """Assessment agent response bundling quizzes and mastery checks."""
+
+    model: str
+    generated_at: datetime
+    topic: str
+    assessment: TutorAssessmentPlan
+    stage_quizzes: list[TutorStageQuizSummary]
+
+
+class TutorCoachResponse(BaseModel):
+    """Coach agent response with diagnostic and completion guidance."""
+
+    model: str
+    generated_at: datetime
+    topic: str
+    understanding: TutorUnderstandingPlan
+    completion: TutorCompletionPlan

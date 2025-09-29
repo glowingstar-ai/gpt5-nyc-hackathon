@@ -9,17 +9,24 @@ from typing import Any
 import httpx
 
 from app.schemas.tutor import (
-    TutorConversationManager,
+    TutorAgentHook,
     TutorAssessmentItem,
     TutorAssessmentPlan,
+    TutorAssessmentResponse,
+    TutorCoachResponse,
     TutorCompletionPlan,
     TutorConceptBreakdown,
+    TutorCurriculumResponse,
     TutorLearningStage,
+    TutorManagerResponse,
     TutorModeRequest,
     TutorModeResponse,
+    TutorModalitiesResponse,
     TutorStageQuiz,
+    TutorStageQuizSummary,
     TutorTeachingModality,
     TutorUnderstandingPlan,
+    TutorConversationManager,
 )
 
 
@@ -50,6 +57,107 @@ class TutorModeService:
             return self._from_openai(payload, response_json)
         except Exception:
             return self._offline_plan(payload)
+
+    async def manager_overview(
+        self, payload: TutorModeRequest
+    ) -> TutorManagerResponse:
+        """Return the manager agent's overview and hook metadata."""
+
+        plan = await self.generate_plan(payload)
+        agent_hooks = [
+            TutorAgentHook(
+                id="curriculum",
+                name="Curriculum Strategist",
+                description="Designs staged learning journeys and prerequisite checks.",
+                endpoint="/tutor/curriculum",
+            ),
+            TutorAgentHook(
+                id="modalities",
+                name="Modality Researcher",
+                description="Curates multi-modal resources aligned to objectives.",
+                endpoint="/tutor/modalities",
+            ),
+            TutorAgentHook(
+                id="assessment",
+                name="Assessment Architect",
+                description="Builds mastery checks, quizzes, and answer keys.",
+                endpoint="/tutor/assessment",
+            ),
+            TutorAgentHook(
+                id="coach",
+                name="Progress Coach",
+                description="Monitors understanding signals and plans wrap-ups.",
+                endpoint="/tutor/coach",
+            ),
+        ]
+
+        return TutorManagerResponse(
+            model=plan.model,
+            generated_at=plan.generated_at,
+            topic=plan.topic,
+            learner_profile=plan.learner_profile,
+            objectives=plan.objectives,
+            conversation_manager=plan.conversation_manager,
+            agent_hooks=agent_hooks,
+        )
+
+    async def curriculum_plan(
+        self, payload: TutorModeRequest
+    ) -> TutorCurriculumResponse:
+        """Return staged curriculum guidance for the curriculum agent."""
+
+        plan = await self.generate_plan(payload)
+        return TutorCurriculumResponse(
+            model=plan.model,
+            generated_at=plan.generated_at,
+            topic=plan.topic,
+            concept_breakdown=plan.concept_breakdown,
+            learning_stages=plan.learning_stages,
+        )
+
+    async def modalities_plan(
+        self, payload: TutorModeRequest
+    ) -> TutorModalitiesResponse:
+        """Return modality recommendations for the modality agent."""
+
+        plan = await self.generate_plan(payload)
+        return TutorModalitiesResponse(
+            model=plan.model,
+            generated_at=plan.generated_at,
+            topic=plan.topic,
+            objectives=plan.objectives,
+            teaching_modalities=plan.teaching_modalities,
+        )
+
+    async def assessment_plan(
+        self, payload: TutorModeRequest
+    ) -> TutorAssessmentResponse:
+        """Return assessment artefacts for the assessment agent."""
+
+        plan = await self.generate_plan(payload)
+        stage_quizzes = [
+            TutorStageQuizSummary(stage=stage.name, quiz=stage.quiz)
+            for stage in plan.learning_stages
+        ]
+        return TutorAssessmentResponse(
+            model=plan.model,
+            generated_at=plan.generated_at,
+            topic=plan.topic,
+            assessment=plan.assessment,
+            stage_quizzes=stage_quizzes,
+        )
+
+    async def coach_plan(self, payload: TutorModeRequest) -> TutorCoachResponse:
+        """Return coaching guidance for monitoring progress."""
+
+        plan = await self.generate_plan(payload)
+        return TutorCoachResponse(
+            model=plan.model,
+            generated_at=plan.generated_at,
+            topic=plan.topic,
+            understanding=plan.understanding,
+            completion=plan.completion,
+        )
 
     async def _call_openai(self, payload: TutorModeRequest) -> dict[str, Any]:
         """Invoke the OpenAI Responses API requesting a JSON plan."""

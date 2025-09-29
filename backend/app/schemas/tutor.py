@@ -158,3 +158,77 @@ class TutorModeResponse(BaseModel):
     completion: TutorCompletionPlan
     conversation_manager: TutorConversationManager
     learning_stages: list[TutorLearningStage]
+
+
+class TutorAgentRoute(BaseModel):
+    """Metadata describing an individual tutor agent endpoint."""
+
+    id: Literal["manager", "curriculum", "modalities", "assessment", "coach"]
+    name: str
+    description: str
+    endpoint: str
+    capabilities: list[str]
+
+
+class TutorManagerAgentResponse(BaseModel):
+    """Response payload for the tutor manager agent."""
+
+    model: str
+    generated_at: datetime
+    topic: str
+    learner_profile: str
+    objectives: list[str]
+    manager: TutorConversationManager
+    understanding: TutorUnderstandingPlan
+    completion: TutorCompletionPlan
+    agents: list[TutorAgentRoute]
+
+
+class TutorCurriculumAgentResponse(BaseModel):
+    """Response payload for the curriculum strategist agent."""
+
+    model: str
+    generated_at: datetime
+    topic: str
+    concept_breakdown: list[TutorConceptBreakdown]
+    learning_stages: list[TutorLearningStage]
+
+
+class TutorModalitiesAgentResponse(BaseModel):
+    """Response payload for the modality researcher agent."""
+
+    model: str
+    generated_at: datetime
+    topic: str
+    teaching_modalities: list[TutorTeachingModality]
+
+
+class TutorStageQuizSummary(BaseModel):
+    """High-level summary of quizzes attached to each learning stage."""
+
+    stage_name: str
+    pass_criteria: list[str]
+    on_success: str
+    on_failure: str
+    quiz: TutorStageQuiz
+
+
+class TutorAssessmentAgentResponse(BaseModel):
+    """Response payload for the assessment architect agent."""
+
+    model: str
+    generated_at: datetime
+    topic: str
+    assessment: TutorAssessmentPlan
+    stage_quizzes: list[TutorStageQuizSummary]
+
+
+class TutorCoachAgentResponse(BaseModel):
+    """Response payload for the progress coach agent."""
+
+    model: str
+    generated_at: datetime
+    topic: str
+    objectives: list[str]
+    understanding: TutorUnderstandingPlan
+    completion: TutorCompletionPlan

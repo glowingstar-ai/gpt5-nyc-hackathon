@@ -9,15 +9,22 @@ from typing import Any
 import httpx
 
 from app.schemas.tutor import (
-    TutorConversationManager,
+    TutorAgentRoute,
+    TutorAssessmentAgentResponse,
     TutorAssessmentItem,
     TutorAssessmentPlan,
+    TutorCoachAgentResponse,
     TutorCompletionPlan,
     TutorConceptBreakdown,
+    TutorCurriculumAgentResponse,
+    TutorConversationManager,
     TutorLearningStage,
+    TutorManagerAgentResponse,
+    TutorModalitiesAgentResponse,
     TutorModeRequest,
     TutorModeResponse,
     TutorStageQuiz,
+    TutorStageQuizSummary,
     TutorTeachingModality,
     TutorUnderstandingPlan,
 )
@@ -244,6 +251,149 @@ class TutorModeService:
             completion=completion,
             conversation_manager=conversation_manager,
             learning_stages=stages,
+        )
+
+    async def generate_manager_agent(
+        self, payload: TutorModeRequest
+    ) -> TutorManagerAgentResponse:
+        """Return the manager agent payload along with registered agents."""
+
+        plan = await self.generate_plan(payload)
+        agents = [
+            TutorAgentRoute(
+                id="manager",
+                name="Tutor Manager",
+                description="Coordinates the tutoring collective and keeps the chat on track.",
+                endpoint="/tutor/manager",
+                capabilities=[
+                    "Summarise the learner profile",
+                    "Route work to specialist tutor agents",
+                    "Contain the conversation within agreed objectives",
+                ],
+            ),
+            TutorAgentRoute(
+                id="curriculum",
+                name="Curriculum Strategist",
+                description="Designs concept sequencing and mastery checkpoints.",
+                endpoint="/tutor/curriculum",
+                capabilities=[
+                    "Break topics into concept-sized lessons",
+                    "Define prerequisites and advancement cues",
+                    "Align stages with the overall objectives",
+                ],
+            ),
+            TutorAgentRoute(
+                id="modalities",
+                name="Modality Researcher",
+                description="Curates resources and multi-modal teaching approaches.",
+                endpoint="/tutor/modalities",
+                capabilities=[
+                    "Select effective teaching modalities",
+                    "Recommend supporting references",
+                    "Adapt explanations to different learner styles",
+                ],
+            ),
+            TutorAgentRoute(
+                id="assessment",
+                name="Assessment Architect",
+                description="Engineers quizzes and feedback loops for mastery.",
+                endpoint="/tutor/assessment",
+                capabilities=[
+                    "Draft formative and summative checks",
+                    "Surface answer keys and remediation guidance",
+                    "Map assessments to learning stages",
+                ],
+            ),
+            TutorAgentRoute(
+                id="coach",
+                name="Progress Coach",
+                description="Monitors understanding signals and celebrates progress.",
+                endpoint="/tutor/coach",
+                capabilities=[
+                    "Observe diagnostic signals",
+                    "Plan follow-up nudges",
+                    "Guide the wrap-up and next steps",
+                ],
+            ),
+        ]
+
+        return TutorManagerAgentResponse(
+            model=plan.model,
+            generated_at=plan.generated_at,
+            topic=plan.topic,
+            learner_profile=plan.learner_profile,
+            objectives=plan.objectives,
+            manager=plan.conversation_manager,
+            understanding=plan.understanding,
+            completion=plan.completion,
+            agents=agents,
+        )
+
+    async def generate_curriculum_agent(
+        self, payload: TutorModeRequest
+    ) -> TutorCurriculumAgentResponse:
+        """Return curriculum strategist output derived from the tutor plan."""
+
+        plan = await self.generate_plan(payload)
+        return TutorCurriculumAgentResponse(
+            model=plan.model,
+            generated_at=plan.generated_at,
+            topic=plan.topic,
+            concept_breakdown=plan.concept_breakdown,
+            learning_stages=plan.learning_stages,
+        )
+
+    async def generate_modalities_agent(
+        self, payload: TutorModeRequest
+    ) -> TutorModalitiesAgentResponse:
+        """Return modality researcher output derived from the tutor plan."""
+
+        plan = await self.generate_plan(payload)
+        return TutorModalitiesAgentResponse(
+            model=plan.model,
+            generated_at=plan.generated_at,
+            topic=plan.topic,
+            teaching_modalities=plan.teaching_modalities,
+        )
+
+    async def generate_assessment_agent(
+        self, payload: TutorModeRequest
+    ) -> TutorAssessmentAgentResponse:
+        """Return assessment architect output derived from the tutor plan."""
+
+        plan = await self.generate_plan(payload)
+        stage_quizzes = [
+            TutorStageQuizSummary(
+                stage_name=stage.name,
+                pass_criteria=stage.pass_criteria,
+                on_success=stage.on_success,
+                on_failure=stage.on_failure,
+                quiz=stage.quiz,
+            )
+            for stage in plan.learning_stages
+        ]
+
+        return TutorAssessmentAgentResponse(
+            model=plan.model,
+            generated_at=plan.generated_at,
+            topic=plan.topic,
+            assessment=plan.assessment,
+            stage_quizzes=stage_quizzes,
+        )
+
+    async def generate_coach_agent(
+        self, payload: TutorModeRequest
+    ) -> TutorCoachAgentResponse:
+        """Return progress coach output derived from the tutor plan."""
+
+        plan = await self.generate_plan(payload)
+        return TutorCoachAgentResponse(
+            model=plan.model,
+            generated_at=plan.generated_at,
+            topic=plan.topic,
+            objectives=plan.objectives,
+            understanding=plan.understanding,
+            completion=plan.completion,
         )
 
     def _offline_plan(self, payload: TutorModeRequest) -> TutorModeResponse:
